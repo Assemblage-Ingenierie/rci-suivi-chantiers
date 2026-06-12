@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * Application COGES (mobile-first, 100 % offline) : une seule page Next
- * (/coges) avec trois vues internes pilotées par les paramètres d'URL
- * (?id=…&vue=…) via history.pushState — aucune navigation serveur, donc tout
- * le parcours (liste → fiche → formulaire) fonctionne hors ligne dès que la
- * page est en cache, y compris pour les fiches jamais ouvertes.
- *
- * Les données viennent d'IndexedDB (pré-chargées par FournisseurOffline) et
- * se rafraîchissent sur les événements EVENEMENT_DONNEES / EVENEMENT_FILE.
- */
 import { useCallback, useEffect, useState } from "react";
 import {
   EVENEMENT_DONNEES,
@@ -17,6 +7,7 @@ import {
   listerEtablissementsLocaux,
   listerFileVisites,
   type EtablissementSuivi,
+  type Visite,
 } from "@/lib/offline/db";
 import { ListeEtablissements } from "./ListeEtablissements";
 import { FicheEtablissement } from "./FicheEtablissement";
@@ -25,20 +16,28 @@ import { FormulaireVisite } from "./FormulaireVisite";
 export type Vue =
   | { type: "liste" }
   | { type: "fiche"; id: string }
-  | { type: "visite"; id: string };
+  | { type: "visite"; id: string }
+  | { type: "edition_visite"; id: string; visiteId: string; enAttente: boolean };
 
 function vueDepuisURL(): Vue {
   const params = new URLSearchParams(window.location.search);
   const id = params.get("id");
-  if (id && params.get("vue") === "visite") return { type: "visite", id };
-  if (id) return { type: "fiche", id };
-  return { type: "liste" };
+  if (!id) return { type: "liste" };
+  const vue = params.get("vue");
+  if (vue === "visite") return { type: "visite", id };
+  if (vue === "edition_visite") {
+    const visiteId = params.get("vid") ?? "";
+    const enAttente = params.get("ea") === "1";
+    return { type: "edition_visite", id, visiteId, enAttente };
+  }
+  return { type: "fiche", id };
 }
 
 function urlPourVue(vue: Vue): string {
   if (vue.type === "liste") return "/coges";
   if (vue.type === "fiche") return `/coges?id=${vue.id}`;
-  return `/coges?id=${vue.id}&vue=visite`;
+  if (vue.type === "visite") return `/coges?id=${vue.id}&vue=visite`;
+  return `/coges?id=${vue.id}&vue=edition_visite&vid=${vue.visiteId}&ea=${vue.enAttente ? "1" : "0"}`;
 }
 
 export function AppCoges({
@@ -49,13 +48,11 @@ export function AppCoges({
   nomComplet: string;
 }) {
   const [vue, setVue] = useState<Vue>({ type: "liste" });
-  const [etablissements, setEtablissements] = useState<
-    EtablissementSuivi[] | null
-  >(null);
+  const [etablissements, setEtablissements] = useState<EtablissementSuivi[] | null>(null);
   const [idsAvecAttente, setIdsAvecAttente] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const [visiteAEditer, setVisiteAEditer] = useState<Visite | null>(null);
 
-  // Synchronisation vue <-> URL (pushState, pas de navigation serveur).
   useEffect(() => {
     setVue(vueDepuisURL());
     const surRetour = () => setVue(vueDepuisURL());
@@ -69,7 +66,6 @@ export function AppCoges({
     window.scrollTo(0, 0);
   }, []);
 
-  // Chargement des données locales + rafraîchissement sur événements.
   const recharger = useCallback(() => {
     listerEtablissementsLocaux().then(setEtablissements);
     listerFileVisites().then((file) =>
@@ -123,6 +119,11 @@ export function AppCoges({
             setMessage(null);
             naviguer({ type: "visite", id: vue.id });
           }}
+          surEditionVisite={(visite, enAttente) => {
+            setMessage(null);
+            setVisiteAEditer(visite);
+            naviguer({ type: "edition_visite", id: vue.id, visiteId: visite.id, enAttente });
+          }}
         />
       )}
 
@@ -137,6 +138,26 @@ export function AppCoges({
               mode === "direct"
                 ? "Visite enregistrée et synchronisée ✓"
                 : "Visite enregistrée hors ligne — elle sera synchronisée au retour du réseau."
+            );
+            naviguer({ type: "fiche", id: vue.id });
+          }}
+        />
+      )}
+
+      {vue.type === "edition_visite" && etablissementCourant && (
+        <FormulaireVisite
+          etablissement={etablissementCourant}
+          userId={userId}
+          nomComplet={nomComplet}
+          visiteAEditer={visiteAEditer ?? undefined}
+          enAttenteEdition={vue.enAttente}
+          surAnnulation={() => naviguer({ type: "fiche", id: vue.id })}
+          surEnregistrement={(mode) => {
+            setVisiteAEditer(null);
+            setMessage(
+              mode === "direct"
+                ? "Visite mise à jour ✓"
+                : "Modification enregistrée hors ligne."
             );
             naviguer({ type: "fiche", id: vue.id });
           }}

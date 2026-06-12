@@ -20,8 +20,10 @@ import {
   ChevronRight,
   ChevronUp,
   Loader2,
+  Pencil,
   Plus,
   Search,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -523,6 +525,117 @@ function LigneMarche({
   );
 }
 
+function FormulairePaiement({
+  marcheId,
+  userId,
+  paiement,
+  surAnnulation,
+  surSauvegarde,
+}: {
+  marcheId: string;
+  userId: string;
+  paiement?: Paiement;
+  surAnnulation: () => void;
+  surSauvegarde: () => void;
+}) {
+  const [date, setDate] = useState(
+    paiement?.date_paiement ?? new Date().toISOString().slice(0, 10)
+  );
+  const [montant, setMontant] = useState(paiement?.montant?.toString() ?? "");
+  const [libelle, setLibelle] = useState(paiement?.libelle ?? "");
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const modeEdition = !!paiement;
+
+  async function sauvegarder(e: React.FormEvent) {
+    e.preventDefault();
+    setErreur(null);
+    setEnCours(true);
+    try {
+      const supabase = createClient();
+      if (modeEdition && paiement) {
+        const { error } = await supabase
+          .from("chantierci_paiements")
+          .update({ date_paiement: date, montant: Number(montant), libelle: libelle.trim() })
+          .eq("id", paiement.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from("chantierci_paiements").insert({
+          marche_id: marcheId,
+          date_paiement: date,
+          montant: Number(montant),
+          libelle: libelle.trim(),
+          saisi_par: userId,
+        });
+        if (error) throw new Error(error.message);
+      }
+      surSauvegarde();
+    } catch (err) {
+      setErreur(err instanceof Error ? err.message : "Erreur inconnue.");
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={sauvegarder}
+      className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3"
+    >
+      <div>
+        <label className="mb-1 block text-xs font-medium">Date</label>
+        <input
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium">Montant (XOF)</label>
+        <input
+          type="number"
+          required
+          min={1}
+          step={1}
+          value={montant}
+          onChange={(e) => setMontant(e.target.value)}
+          placeholder="15 000 000"
+          className="w-40 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+        />
+      </div>
+      <div className="min-w-48 flex-1">
+        <label className="mb-1 block text-xs font-medium">Libellé</label>
+        <input
+          type="text"
+          required
+          value={libelle}
+          onChange={(e) => setLibelle(e.target.value)}
+          placeholder="Décompte n°2"
+          className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={enCours}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-assemblage px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+      >
+        {enCours && <Loader2 className="h-4 w-4 animate-spin" />}
+        {modeEdition ? "Mettre à jour" : "Enregistrer"}
+      </button>
+      <button
+        type="button"
+        onClick={surAnnulation}
+        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
+      >
+        Annuler
+      </button>
+      {erreur && <p className="w-full text-sm text-red-700">{erreur}</p>}
+    </form>
+  );
+}
+
 function DetailPaiements({
   marche,
   paiements,
@@ -537,37 +650,20 @@ function DetailPaiements({
   surPaiementAjoute: () => void;
 }) {
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [montant, setMontant] = useState("");
-  const [libelle, setLibelle] = useState("");
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState<string | null>(null);
+  const [paiementEdite, setPaiementEdite] = useState<Paiement | null>(null);
+  const [suppressionId, setSuppressionId] = useState<string | null>(null);
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
 
-  async function ajouter(e: React.FormEvent) {
-    e.preventDefault();
-    if (!marche.id) return;
-    setErreur(null);
-    setEnCours(true);
+  async function supprimer(id: string) {
+    setSuppressionEnCours(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from("chantierci_paiements").insert({
-        marche_id: marche.id,
-        date_paiement: date,
-        montant: Number(montant),
-        libelle: libelle.trim(),
-        saisi_par: userId,
-      });
+      const { error } = await supabase.from("chantierci_paiements").delete().eq("id", id);
       if (error) throw new Error(error.message);
-      setFormulaireOuvert(false);
-      setMontant("");
-      setLibelle("");
+      setSuppressionId(null);
       surPaiementAjoute();
-    } catch (err) {
-      setErreur(
-        err instanceof Error ? `Ajout impossible : ${err.message}` : "Ajout impossible."
-      );
     } finally {
-      setEnCours(false);
+      setSuppressionEnCours(false);
     }
   }
 
@@ -585,7 +681,7 @@ function DetailPaiements({
         <p className="text-sm font-semibold">
           Paiements ({paiements.length}) — {marche.numero_marche}
         </p>
-        {peutSaisirPaiement && !formulaireOuvert && (
+        {peutSaisirPaiement && !formulaireOuvert && !paiementEdite && (
           <button
             onClick={() => setFormulaireOuvert(true)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-assemblage px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
@@ -595,73 +691,50 @@ function DetailPaiements({
         )}
       </div>
 
-      {formulaireOuvert && (
-        <form
-          onSubmit={ajouter}
-          className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-gray-200 bg-white p-3"
-        >
-          <div>
-            <label htmlFor={`date-${marche.id}`} className="mb-1 block text-xs font-medium">
-              Date
-            </label>
-            <input
-              id={`date-${marche.id}`}
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor={`montant-${marche.id}`} className="mb-1 block text-xs font-medium">
-              Montant (XOF)
-            </label>
-            <input
-              id={`montant-${marche.id}`}
-              type="number"
-              required
-              min={1}
-              step={1}
-              value={montant}
-              onChange={(e) => setMontant(e.target.value)}
-              placeholder="15 000 000"
-              className="w-40 rounded-lg border border-gray-300 px-2 py-2 text-sm"
-            />
-          </div>
-          <div className="min-w-48 flex-1">
-            <label htmlFor={`libelle-${marche.id}`} className="mb-1 block text-xs font-medium">
-              Libellé
-            </label>
-            <input
-              id={`libelle-${marche.id}`}
-              type="text"
-              required
-              value={libelle}
-              onChange={(e) => setLibelle(e.target.value)}
-              placeholder="Décompte n°2"
-              className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm"
-            />
-          </div>
+      {formulaireOuvert && marche.id && (
+        <FormulairePaiement
+          marcheId={marche.id}
+          userId={userId}
+          surAnnulation={() => setFormulaireOuvert(false)}
+          surSauvegarde={() => {
+            setFormulaireOuvert(false);
+            surPaiementAjoute();
+          }}
+        />
+      )}
+
+      {paiementEdite && marche.id && (
+        <FormulairePaiement
+          marcheId={marche.id}
+          userId={userId}
+          paiement={paiementEdite}
+          surAnnulation={() => setPaiementEdite(null)}
+          surSauvegarde={() => {
+            setPaiementEdite(null);
+            surPaiementAjoute();
+          }}
+        />
+      )}
+
+      {/* Confirmation de suppression */}
+      {suppressionId && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+          <span className="flex-1 text-red-800">Supprimer ce paiement définitivement ?</span>
           <button
-            type="submit"
-            disabled={enCours}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-assemblage px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            onClick={() => supprimer(suppressionId)}
+            disabled={suppressionEnCours}
+            className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
           >
-            {enCours && <Loader2 className="h-4 w-4 animate-spin" />}
-            Enregistrer
+            {suppressionEnCours && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Supprimer
           </button>
           <button
-            type="button"
-            onClick={() => setFormulaireOuvert(false)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
+            onClick={() => setSuppressionId(null)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium"
           >
             Annuler
           </button>
-          {erreur && (
-            <p className="w-full text-sm text-red-700">{erreur}</p>
-          )}
-        </form>
+        </div>
       )}
 
       {paiements.length > 0 ? (
@@ -671,18 +744,45 @@ function DetailPaiements({
               <th className="py-1 pr-3 font-medium">Date</th>
               <th className="py-1 pr-3 font-medium">Libellé</th>
               <th className="py-1 pr-3 text-right font-medium">Montant</th>
+              {peutSaisirPaiement && <th className="py-1 font-medium" />}
             </tr>
           </thead>
           <tbody>
             {paiements.map((p) => (
               <tr key={p.id} className="border-t border-red-100">
-                <td className="py-1.5 pr-3 whitespace-nowrap">
-                  {formatDate(p.date_paiement)}
-                </td>
+                <td className="py-1.5 pr-3 whitespace-nowrap">{formatDate(p.date_paiement)}</td>
                 <td className="py-1.5 pr-3">{p.libelle}</td>
                 <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap">
                   {formatXOF(p.montant)}
                 </td>
+                {peutSaisirPaiement && (
+                  <td className="py-1.5 pl-2 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setFormulaireOuvert(false);
+                          setSuppressionId(null);
+                          setPaiementEdite(p);
+                        }}
+                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                        title="Modifier"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPaiementEdite(null);
+                          setFormulaireOuvert(false);
+                          setSuppressionId(p.id ?? null);
+                        }}
+                        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

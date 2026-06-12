@@ -1,21 +1,16 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Loader2, X } from "lucide-react";
-import type { EtablissementSuivi, VisiteInsert } from "@/lib/offline/db";
-import { enregistrerVisite, type PhotoASauver } from "@/lib/offline/sync";
+import type { EtablissementSuivi, Visite, VisiteInsert } from "@/lib/offline/db";
+import { enregistrerVisite, mettreAJourVisite, type PhotoASauver } from "@/lib/offline/sync";
 import {
   LIBELLES_RAISONS_ARRET,
   LIBELLES_STATUTS_CHANTIER,
   type StatutChantier,
 } from "@/lib/constants";
 
-const STATUTS: StatutChantier[] = [
-  "non_demarre",
-  "en_cours",
-  "arrete",
-  "receptionne",
-];
+const STATUTS: StatutChantier[] = ["non_demarre", "en_cours", "arrete", "receptionne"];
 
 const CORPS_ETAT = [
   { cle: "pct_excavation", libelle: "Excavation" },
@@ -39,39 +34,70 @@ export function FormulaireVisite({
   etablissement,
   userId,
   nomComplet,
+  visiteAEditer,
+  enAttenteEdition = false,
   surAnnulation,
   surEnregistrement,
 }: {
   etablissement: EtablissementSuivi;
   userId: string;
   nomComplet: string;
+  visiteAEditer?: Visite;
+  enAttenteEdition?: boolean;
   surAnnulation: () => void;
   surEnregistrement: (mode: "direct" | "file_attente") => void;
 }) {
+  const modeEdition = !!visiteAEditer;
   const aujourdHui = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [dateVisite, setDateVisite] = useState(aujourdHui);
+
+  const [dateVisite, setDateVisite] = useState(
+    visiteAEditer?.date_visite ?? aujourdHui
+  );
   const [statut, setStatut] = useState<StatutChantier>(
-    etablissement.statut ?? "en_cours"
+    (visiteAEditer?.statut_chantier as StatutChantier) ?? etablissement.statut ?? "en_cours"
   );
   const [avancement, setAvancement] = useState<number>(
-    etablissement.dernier_avancement_reel_pct ?? 0
+    visiteAEditer?.avancement_reel_pct ?? etablissement.dernier_avancement_reel_pct ?? 0
   );
   const [corpsEtat, setCorpsEtat] = useState<Record<ClesCorpsEtat, number>>({
-    pct_excavation: 0,
-    pct_fondation: 0,
-    pct_verticaux: 0,
-    pct_charpente: 0,
-    pct_couverture: 0,
-    pct_finition: 0,
+    pct_excavation: visiteAEditer?.pct_excavation ?? 0,
+    pct_fondation: visiteAEditer?.pct_fondation ?? 0,
+    pct_verticaux: visiteAEditer?.pct_verticaux ?? 0,
+    pct_charpente: visiteAEditer?.pct_charpente ?? 0,
+    pct_couverture: visiteAEditer?.pct_couverture ?? 0,
+    pct_finition: visiteAEditer?.pct_finition ?? 0,
   });
-  const [raisons, setRaisons] = useState<string[]>([]);
-  const [raisonAutre, setRaisonAutre] = useState("");
-  const [commentaire, setCommentaire] = useState("");
+  const [raisons, setRaisons] = useState<string[]>(
+    (visiteAEditer?.raisons_arret as string[]) ?? []
+  );
+  const [raisonAutre, setRaisonAutre] = useState(
+    visiteAEditer?.raison_arret_autre ?? ""
+  );
+  const [commentaire, setCommentaire] = useState(visiteAEditer?.commentaire ?? "");
   const [photos, setPhotos] = useState<PhotoChoisie[]>([]);
   const [enCours, setEnCours] = useState(false);
   const [etape, setEtape] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const refInputPhotos = useRef<HTMLInputElement>(null);
+
+  // Réinitialise le formulaire si visiteAEditer change (navigation retour/avant).
+  useEffect(() => {
+    if (!visiteAEditer) return;
+    setDateVisite(visiteAEditer.date_visite);
+    setStatut((visiteAEditer.statut_chantier as StatutChantier) ?? "en_cours");
+    setAvancement(visiteAEditer.avancement_reel_pct ?? 0);
+    setCorpsEtat({
+      pct_excavation: visiteAEditer.pct_excavation ?? 0,
+      pct_fondation: visiteAEditer.pct_fondation ?? 0,
+      pct_verticaux: visiteAEditer.pct_verticaux ?? 0,
+      pct_charpente: visiteAEditer.pct_charpente ?? 0,
+      pct_couverture: visiteAEditer.pct_couverture ?? 0,
+      pct_finition: visiteAEditer.pct_finition ?? 0,
+    });
+    setRaisons((visiteAEditer.raisons_arret as string[]) ?? []);
+    setRaisonAutre(visiteAEditer.raison_arret_autre ?? "");
+    setCommentaire(visiteAEditer.commentaire ?? "");
+  }, [visiteAEditer]);
 
   function ajouterPhotos(fichiers: FileList | null) {
     if (!fichiers) return;
@@ -103,32 +129,7 @@ export function FormulaireVisite({
     setErreur(null);
     setEnCours(true);
     try {
-      // Compression côté client : cible < 500 Ko / photo (CDC §2.1).
-      const photosCompressees: PhotoASauver[] = [];
-      if (photos.length > 0) {
-        const imageCompression = (await import("browser-image-compression"))
-          .default;
-        for (let i = 0; i < photos.length; i++) {
-          setEtape(`Compression photo ${i + 1}/${photos.length}…`);
-          const compressee = await imageCompression(photos[i].fichier, {
-            maxSizeMB: 0.5,
-            maxWidthOrHeight: 1600,
-            useWebWorker: true,
-            initialQuality: 0.8,
-          });
-          photosCompressees.push({
-            blob: compressee,
-            nom_fichier: photos[i].fichier.name,
-          });
-        }
-      }
-
-      setEtape("Enregistrement…");
-      const visite: Omit<VisiteInsert, "id"> = {
-        etablissement_id: etablissement.id!,
-        date_visite: dateVisite,
-        nom_visiteur: nomComplet,
-        user_id: userId,
+      const champsModifiables = {
         statut_chantier: statut,
         avancement_reel_pct: avancement,
         ...corpsEtat,
@@ -138,7 +139,43 @@ export function FormulaireVisite({
           statut === "arrete" && raisons.includes("autre") && raisonAutre.trim()
             ? raisonAutre.trim()
             : null,
+      };
+
+      if (modeEdition && visiteAEditer) {
+        setEtape("Mise à jour…");
+        await mettreAJourVisite(
+          visiteAEditer.id,
+          { date_visite: dateVisite, ...champsModifiables },
+          enAttenteEdition
+        );
+        surEnregistrement(enAttenteEdition ? "file_attente" : "direct");
+        return;
+      }
+
+      // Nouveau — avec photos
+      const photosCompressees: PhotoASauver[] = [];
+      if (photos.length > 0) {
+        const imageCompression = (await import("browser-image-compression")).default;
+        for (let i = 0; i < photos.length; i++) {
+          setEtape(`Compression photo ${i + 1}/${photos.length}…`);
+          const compressee = await imageCompression(photos[i].fichier, {
+            maxSizeMB: 0.5,
+            maxWidthOrHeight: 1600,
+            useWebWorker: true,
+            initialQuality: 0.8,
+          });
+          photosCompressees.push({ blob: compressee, nom_fichier: photos[i].fichier.name });
+        }
+      }
+
+      setEtape("Enregistrement…");
+      const visite: Omit<VisiteInsert, "id"> = {
+        etablissement_id: etablissement.id!,
+        nom_visiteur: nomComplet,
+        user_id: userId,
         sync_status: "synced",
+        date_visite: dateVisite,
+        ...champsModifiables,
       };
 
       const { mode } = await enregistrerVisite(visite, photosCompressees);
@@ -168,11 +205,21 @@ export function FormulaireVisite({
         <ArrowLeft className="h-4 w-4" /> {etablissement.nom}
       </button>
 
-      <h1 className="mb-1 text-xl font-bold">Nouvelle visite</h1>
-      <p className="mb-4 text-sm text-gray-500">
-        Fonctionne aussi hors connexion : la visite sera synchronisée au retour
-        du réseau.
-      </p>
+      <h1 className="mb-1 text-xl font-bold">
+        {modeEdition ? "Modifier la visite" : "Nouvelle visite"}
+      </h1>
+      {!modeEdition && (
+        <p className="mb-4 text-sm text-gray-500">
+          Fonctionne aussi hors connexion : la visite sera synchronisée au retour du réseau.
+        </p>
+      )}
+      {modeEdition && (
+        <p className="mb-4 text-sm text-gray-500">
+          {enAttenteEdition
+            ? "Visite en attente de synchro — les modifications seront envoyées avec la visite."
+            : "Les photos existantes sont conservées ; seules les données sont modifiables ici."}
+        </p>
+      )}
 
       <form onSubmit={enregistrer} className="space-y-5">
         {/* Date */}
@@ -191,7 +238,7 @@ export function FormulaireVisite({
           />
         </div>
 
-        {/* Statut — gros boutons (saisie terrain) */}
+        {/* Statut */}
         <div className="rounded-xl bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm font-medium">Statut du chantier</p>
           <div className="grid grid-cols-2 gap-2">
@@ -213,15 +260,10 @@ export function FormulaireVisite({
 
           {statut === "arrete" && (
             <div className="mt-4 rounded-lg bg-orange-50 p-3">
-              <p className="mb-2 text-sm font-medium text-orange-900">
-                Raisons de l&apos;arrêt
-              </p>
+              <p className="mb-2 text-sm font-medium text-orange-900">Raisons de l&apos;arrêt</p>
               <div className="space-y-2">
                 {RAISONS.map((raison) => (
-                  <label
-                    key={raison}
-                    className="flex items-center gap-3 text-sm"
-                  >
+                  <label key={raison} className="flex items-center gap-3 text-sm">
                     <input
                       type="checkbox"
                       checked={raisons.includes(raison)}
@@ -268,23 +310,17 @@ export function FormulaireVisite({
               required
               value={avancement}
               onChange={(e) =>
-                setAvancement(
-                  Math.max(0, Math.min(100, Number(e.target.value)))
-                )
+                setAvancement(Math.max(0, Math.min(100, Number(e.target.value))))
               }
               className="w-20 rounded-lg border border-gray-300 px-2 py-2 text-center text-base font-semibold"
             />
           </div>
 
-          <p className="mb-2 mt-5 text-sm font-medium">
-            Avancement par corps d&apos;état
-          </p>
+          <p className="mb-2 mt-5 text-sm font-medium">Avancement par corps d&apos;état</p>
           <div className="space-y-3">
             {CORPS_ETAT.map(({ cle, libelle }) => (
               <div key={cle} className="flex items-center gap-3">
-                <span className="w-36 shrink-0 text-sm text-gray-600">
-                  {libelle}
-                </span>
+                <span className="w-36 shrink-0 text-sm text-gray-600">{libelle}</span>
                 <input
                   type="range"
                   min={0}
@@ -292,10 +328,7 @@ export function FormulaireVisite({
                   step={5}
                   value={corpsEtat[cle]}
                   onChange={(e) =>
-                    setCorpsEtat((c) => ({
-                      ...c,
-                      [cle]: Number(e.target.value),
-                    }))
+                    setCorpsEtat((c) => ({ ...c, [cle]: Number(e.target.value) }))
                   }
                   className="h-2 flex-1 accent-assemblage"
                 />
@@ -307,52 +340,54 @@ export function FormulaireVisite({
           </div>
         </div>
 
-        {/* Photos */}
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <p className="mb-2 text-sm font-medium">
-            Photos{" "}
-            <span className="font-normal text-gray-500">
-              (compressées automatiquement, &lt; 500 Ko)
-            </span>
-          </p>
-          <input
-            ref={refInputPhotos}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => ajouterPhotos(e.target.files)}
-            className="hidden"
-            id="photos"
-          />
-          <label
-            htmlFor="photos"
-            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-4 text-sm font-medium text-gray-600 transition hover:border-assemblage hover:text-assemblage"
-          >
-            <Camera className="h-5 w-5" /> Ajouter des photos
-          </label>
-          {photos.length > 0 && (
-            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {photos.map((photo, i) => (
-                <div key={photo.apercu} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo.apercu}
-                    alt={photo.fichier.name}
-                    className="h-24 w-full rounded-lg object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => retirerPhoto(i)}
-                    aria-label="Retirer la photo"
-                    className="absolute -right-1.5 -top-1.5 rounded-full bg-gray-900 p-1 text-white shadow"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Photos — seulement en mode création */}
+        {!modeEdition && (
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <p className="mb-2 text-sm font-medium">
+              Photos{" "}
+              <span className="font-normal text-gray-500">
+                (compressées automatiquement, &lt; 500 Ko)
+              </span>
+            </p>
+            <input
+              ref={refInputPhotos}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => ajouterPhotos(e.target.files)}
+              className="hidden"
+              id="photos"
+            />
+            <label
+              htmlFor="photos"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-4 text-sm font-medium text-gray-600 transition hover:border-assemblage hover:text-assemblage"
+            >
+              <Camera className="h-5 w-5" /> Ajouter des photos
+            </label>
+            {photos.length > 0 && (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {photos.map((photo, i) => (
+                  <div key={photo.apercu} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.apercu}
+                      alt={photo.fichier.name}
+                      className="h-24 w-full rounded-lg object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => retirerPhoto(i)}
+                      aria-label="Retirer la photo"
+                      className="absolute -right-1.5 -top-1.5 rounded-full bg-gray-900 p-1 text-white shadow"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Commentaire */}
         <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -370,9 +405,7 @@ export function FormulaireVisite({
         </div>
 
         {erreur && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {erreur}
-          </p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>
         )}
 
         <div className="flex gap-3">
@@ -390,7 +423,7 @@ export function FormulaireVisite({
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-assemblage px-4 py-3 text-base font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
           >
             {enCours && <Loader2 className="h-5 w-5 animate-spin" />}
-            {etape ?? "Enregistrer la visite"}
+            {etape ?? (modeEdition ? "Enregistrer les modifications" : "Enregistrer la visite")}
           </button>
         </div>
       </form>

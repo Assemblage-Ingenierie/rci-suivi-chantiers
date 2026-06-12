@@ -12,6 +12,7 @@ import {
   compterEnAttente,
   emettreChangementFile,
   getDB,
+  mettreAJourVisiteEnFile,
   mettreEnFilePhoto,
   mettreEnFileVisite,
   type PhotoEnAttente,
@@ -191,6 +192,34 @@ export async function demanderBackgroundSync() {
   } catch {
     // Non supporté ou refusé : le mécanisme manuel reste disponible.
   }
+}
+
+/**
+ * Met à jour une visite existante.
+ * - En attente (IndexedDB) : modifie l'entrée locale.
+ * - Synchronisée : update Supabase + rafraîchit le cache local.
+ */
+export async function mettreAJourVisite(
+  visiteId: string,
+  champs: Partial<Omit<VisiteInsert, "id" | "etablissement_id" | "user_id" | "sync_status">>,
+  enAttente: boolean
+): Promise<void> {
+  if (enAttente) {
+    const db = await getDB();
+    const entree = await db.get("file_visites", visiteId);
+    if (!entree) return;
+    await mettreAJourVisiteEnFile(visiteId, { ...entree.visite, ...champs });
+    return;
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("chantierci_visites")
+    .update(champs)
+    .eq("id", visiteId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  if (data) await ajouterVisiteLocale(data);
 }
 
 export { compterEnAttente };

@@ -162,6 +162,22 @@ export async function mettreEnFileVisite(entree: VisiteEnAttente) {
   emettreChangementFile();
 }
 
+export async function mettreAJourVisiteEnFile(id: string, visite: VisiteInsert) {
+  const db = await getDB();
+  const entree = await db.get("file_visites", id);
+  if (!entree) return;
+  await db.put("file_visites", { ...entree, visite });
+  emettreChangementFile();
+}
+
+export async function supprimerVisiteEnFile(id: string) {
+  const db = await getDB();
+  await db.delete("file_visites", id);
+  const photos = await db.getAllFromIndex("file_photos", "par_visite", id);
+  for (const photo of photos) await db.delete("file_photos", photo.id);
+  emettreChangementFile();
+}
+
 export async function mettreEnFilePhoto(entree: PhotoEnAttente) {
   const db = await getDB();
   await db.put("file_photos", entree);

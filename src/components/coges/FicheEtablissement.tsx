@@ -6,6 +6,7 @@ import {
   Building2,
   Clock,
   Loader2,
+  Pencil,
   Phone,
   Plus,
   User,
@@ -44,11 +45,13 @@ export function FicheEtablissement({
   chargementEnCours,
   surRetour,
   surNouvelleVisite,
+  surEditionVisite,
 }: {
   etablissement: EtablissementSuivi | null;
   chargementEnCours: boolean;
   surRetour: () => void;
   surNouvelleVisite: () => void;
+  surEditionVisite: (visite: Visite, enAttente: boolean) => void;
 }) {
   const [visites, setVisites] = useState<VisiteAffichee[] | null>(null);
 
@@ -110,9 +113,7 @@ export function FicheEtablissement({
 
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold leading-tight">
-            {etablissement.nom}
-          </h1>
+          <h1 className="text-xl font-bold leading-tight">{etablissement.nom}</h1>
           <p className="text-sm text-gray-500">
             {etablissement.departement}
             {etablissement.village ? ` — ${etablissement.village}` : ""} ·{" "}
@@ -131,19 +132,14 @@ export function FicheEtablissement({
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 shrink-0 text-gray-400" />
             <dt className="text-gray-500">Directeur :</dt>
-            <dd className="font-medium">
-              {etablissement.nom_directeur ?? "—"}
-            </dd>
+            <dd className="font-medium">{etablissement.nom_directeur ?? "—"}</dd>
           </div>
           <div className="flex items-center gap-2">
             <Phone className="h-4 w-4 shrink-0 text-gray-400" />
             <dt className="text-gray-500">Téléphone :</dt>
             <dd className="font-medium">
               {etablissement.telephone ? (
-                <a
-                  href={`tel:${etablissement.telephone}`}
-                  className="text-assemblage"
-                >
+                <a href={`tel:${etablissement.telephone}`} className="text-assemblage">
                   {etablissement.telephone}
                 </a>
               ) : (
@@ -171,9 +167,7 @@ export function FicheEtablissement({
             <dt className="text-gray-500">N° marché</dt>
             <dd className="font-medium">{etablissement.numero_marche}</dd>
             <dt className="text-gray-500">Montant</dt>
-            <dd className="font-medium">
-              {formatXOF(etablissement.montant_marche)}
-            </dd>
+            <dd className="font-medium">{formatXOF(etablissement.montant_marche)}</dd>
             <dt className="text-gray-500">Payé</dt>
             <dd className="font-medium">
               {formatXOF(etablissement.montant_paye)}
@@ -181,20 +175,16 @@ export function FicheEtablissement({
                 ` (${etablissement.avancement_financier_pct} %)`}
             </dd>
             <dt className="text-gray-500">Démarrage</dt>
-            <dd className="font-medium">
-              {formatDate(etablissement.date_demarrage)}
-            </dd>
+            <dd className="font-medium">{formatDate(etablissement.date_demarrage)}</dd>
             <dt className="text-gray-500">Fin estimée</dt>
-            <dd className="font-medium">
-              {formatDate(etablissement.date_fin_estimative)}
-            </dd>
+            <dd className="font-medium">{formatDate(etablissement.date_fin_estimative)}</dd>
           </dl>
         ) : (
           <p className="text-sm text-gray-500">Aucun marché enregistré.</p>
         )}
       </div>
 
-      {/* Nouvelle visite — bouton large (terrain / mobile) */}
+      {/* Bouton nouvelle visite */}
       <button
         onClick={surNouvelleVisite}
         className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-assemblage px-4 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-red-700"
@@ -205,9 +195,7 @@ export function FicheEtablissement({
       {/* Historique des visites */}
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
         Historique des visites{" "}
-        {visites !== null && (
-          <span className="font-normal">({visites.length})</span>
-        )}
+        {visites !== null && <span className="font-normal">({visites.length})</span>}
       </h2>
       <ul className="space-y-3">
         {(visites ?? []).map((v) => (
@@ -220,14 +208,17 @@ export function FicheEtablissement({
                     <Clock className="h-3 w-3" /> En attente de synchro
                   </span>
                 )}
+                <button
+                  onClick={() => surEditionVisite(v, v.enAttente ?? false)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-gray-300 hover:text-gray-900"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Modifier
+                </button>
                 <BoutonsExportVisite
                   etablissement={{
                     nom: etablissement.nom ?? "—",
                     lot: etablissement.lot_nom,
-                    localisation: [
-                      etablissement.departement,
-                      etablissement.village,
-                    ]
+                    localisation: [etablissement.departement, etablissement.village]
                       .filter(Boolean)
                       .join(" — "),
                     province: etablissement.province,
@@ -242,18 +233,14 @@ export function FicheEtablissement({
               {v.avancement_reel_pct !== null && (
                 <>
                   {" — avancement global "}
-                  <span className="font-semibold text-gray-800">
-                    {v.avancement_reel_pct} %
-                  </span>
+                  <span className="font-semibold text-gray-800">{v.avancement_reel_pct} %</span>
                 </>
               )}
             </p>
             <div className="grid grid-cols-3 gap-1 text-xs text-gray-600 sm:grid-cols-6">
               {CORPS_ETAT.map(({ cle, libelle }) => (
                 <div key={cle} className="rounded bg-gray-50 px-1.5 py-1 text-center">
-                  <span className="block text-[10px] uppercase text-gray-400">
-                    {libelle}
-                  </span>
+                  <span className="block text-[10px] uppercase text-gray-400">{libelle}</span>
                   <span className="font-semibold">
                     {(v[cle] as number | null) ?? "—"}
                     {v[cle] !== null && "%"}
@@ -264,16 +251,12 @@ export function FicheEtablissement({
             {v.raisons_arret && v.raisons_arret.length > 0 && (
               <p className="mt-2 text-sm text-orange-700">
                 Arrêt :{" "}
-                {v.raisons_arret
-                  .map((r) => LIBELLES_RAISONS_ARRET[r] ?? r)
-                  .join(", ")}
+                {v.raisons_arret.map((r) => LIBELLES_RAISONS_ARRET[r] ?? r).join(", ")}
                 {v.raison_arret_autre ? ` — ${v.raison_arret_autre}` : ""}
               </p>
             )}
             {v.commentaire && (
-              <p className="mt-2 text-sm italic text-gray-600">
-                « {v.commentaire} »
-              </p>
+              <p className="mt-2 text-sm italic text-gray-600">« {v.commentaire} »</p>
             )}
           </li>
         ))}
