@@ -1,0 +1,7 @@
+# Fichiers inutiles au runtime de l'app déployée.
+# (node_modules et .next sont déjà ignorés par défaut par Vercel.)
+.env.local
+.claude
+supabase
+CdC_ChantierCI.md
+ONBOARDING.md
