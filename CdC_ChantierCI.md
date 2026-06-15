@@ -3,7 +3,27 @@
 **Maître d'ouvrage :** Ministère de l'Éducation Nationale (MEN)  
 **AMO :** Assemblage Ingénierie  
 **Date :** Juin 2026  
-**Version :** 1.1
+**Version :** 2.0  
+**État :** V1 livrée et déployée (Vercel + GitHub `Assemblage-Ingenierie/rci-suivi-chantiers`) ; évolutions v2 livrées.
+
+---
+
+## 0. Journal des versions
+
+### Version 2.0 (juin 2026) — évolutions post-livraison
+- **Nouveau rôle `men_viewer`** (MEN — Décideur) : lecture intégrale + exports, **aucune écriture**.
+- **Archivage au lieu de suppression** des établissements **et** des fiches de visite (réversible). Les éléments archivés disparaissent des tableaux, du dashboard, de la carte et du mode hors ligne ; ils restent consultables et restaurables par l'admin.
+- **Statut de l'établissement dérivé automatiquement** de la dernière visite non archivée (trigger base de données) — il n'est plus saisi à la main.
+- **Édition des marchés** ouverte aux rôles national + admin (création, modification) ; **édition et suppression des paiements** ouvertes aux rôles national + admin.
+- **Marché multi-établissements** : un même marché (entreprise + n°) peut couvrir plusieurs établissements, chacun avec son **montant propre** ; vue regroupée par n° de marché avec agrégats.
+- **Création d'établissement** depuis l'interface (admin), en plus de l'import CSV.
+- **Carte** : bouton d'agrandissement plein écran.
+- **Dashboard** : graphique des visites de chantiers par personnel dans le temps (regroupable par jour / semaine / mois / trimestre).
+- **Ergonomie mobile** : barre latérale repliable (menu hamburger + overlay) sur petits écrans.
+- **Édition des fiches de visite** (côté COGES, y compris hors ligne, et correction par l'admin).
+
+### Version 1.x (juin 2026) — livraison initiale
+Application complète en 10 étapes (schéma + RLS, seed, auth, offline, COGES, dashboard MEN, marchés, régional, exports, admin).
 
 ---
 
@@ -48,7 +68,9 @@ L'application supporte le suivi de **350 chantiers de construction scolaire** r�
 - Un badge visuel indique le nombre d'entrées en attente de synchronisation
 - Un **bouton "Synchroniser maintenant"** est toujours visible quand des entrées sont en attente (comportement de base, tous navigateurs)
 - La background sync automatique (sans action utilisateur) est activée si le navigateur la supporte (Chrome Android) — sur Safari iOS, le bouton manuel est le seul mécanisme
-- En cas de conflit (même établissement modifié offline et online), la version la plus récente (timestamp) est conservée, avec alerte à l'utilisateur
+- L'`id` de chaque visite est généré **côté client** au moment de la saisie : la synchronisation est **idempotente** (un envoi en double est détecté et ignoré), ce qui évite les conflits de duplication
+- Les visites mises en file peuvent être **modifiées** localement avant synchronisation ; une visite déjà synchronisée est modifiable directement (mise à jour serveur)
+- La bibliothèque de compression d'images est **incluse statiquement** dans le bundle de l'interface COGES (et non chargée à la demande), afin que la prise de photos reste fonctionnelle même lors d'une première utilisation entièrement hors ligne
 
 ---
 
@@ -68,17 +90,20 @@ L'application supporte le suivi de **350 chantiers de construction scolaire** r�
 | departement | text | |
 | village | text | |
 | lot_id | uuid FK | FK vers `lots` |
-| statut | enum | `non_demarre` / `en_cours` / `arrete` / `receptionne` |
+| statut | enum | `non_demarre` / `en_cours` / `arrete` / `receptionne` — **dérivé automatiquement de la dernière visite non archivée** (trigger), non saisi manuellement |
+| archive | boolean | défaut `false` — un établissement archivé est masqué partout (tableaux, dashboard, carte, hors ligne) mais restaurable par l'admin |
 | created_at | timestamp | |
 
 ### 3.2 Table `marches_travaux`
+Une ligne = la part d'un marché pour **un** établissement. Un même marché (même `nom_entreprise` + `numero_marche`) peut donc concerner **plusieurs établissements**, chacun avec son **propre montant** ; la vue Marchés permet de regrouper ces lignes par numéro de marché et d'en afficher les agrégats.
+
 | Champ | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
 | etablissement_id | uuid FK | |
 | nom_entreprise | text | |
-| numero_marche | text | |
-| montant_marche | numeric | XOF — montant total du marché |
+| numero_marche | text | Peut être partagé entre plusieurs établissements |
+| montant_marche | numeric | XOF — montant pour **cet** établissement |
 | date_demarrage | date | |
 | date_fin_estimative | date | |
 
@@ -118,9 +143,12 @@ L'application supporte le suivi de **350 chantiers de construction scolaire** r�
 | raisons_arret | text[] | Multi-select |
 | raison_arret_autre | text | Champ libre si "autre" sélectionné |
 | sync_status | enum | `synced` / `pending_sync` (gestion offline) |
+| archive | boolean | défaut `false` — une visite archivée est exclue de l'historique, des agrégats et du calcul du statut de l'établissement ; restaurable par l'admin |
 | created_at | timestamp | |
 
 **Valeurs `raisons_arret` :** `manque_effectif` / `manque_materiau` / `probleme_paiement` / `autre`
+
+> Le statut de l'établissement (`etablissements.statut`) est recalculé automatiquement à chaque insertion / modification / archivage de visite : il reflète le `statut_chantier` de la dernière visite non archivée (à défaut, `non_demarre`).
 
 ### 3.5 Table `photos_visites`
 | Champ | Type | Notes |
@@ -146,7 +174,8 @@ L'application supporte le suivi de **350 chantiers de construction scolaire** r�
 | id | uuid PK | = Supabase Auth user id |
 | nom_complet | text | |
 | telephone | text | |
-| role | enum | `coges` / `regional` / `national` / `admin` |
+| email | text | Email dénormalisé (visible par l'admin) |
+| role | enum | `coges` / `regional` / `national` / `men_viewer` / `admin` |
 | lot_ids | uuid[] | Lots attribués (COGES et régional) |
 | statut_compte | enum | `en_attente` / `actif` / `suspendu` |
 | created_at | timestamp | |
@@ -155,14 +184,18 @@ L'application supporte le suivi de **350 chantiers de construction scolaire** r�
 
 ## 4. Rôles et permissions
 
-| Rôle | Établissements visibles | Saisie visites | Saisie paiements | Exports | Admin |
-|---|---|---|---|---|---|
-| **COGES** | Ses lots uniquement | Oui | Non | Ses lots | Non |
-| **Régional** | Sa région | Non (lecture + commentaires) | Non | Sa région | Non |
-| **National (MEN)** | Tous | Non | Oui | Tout | Non |
-| **Admin** | Tous | Oui | Oui | Tout | Oui |
+| Rôle | Établissements visibles | Saisie / édition visites | Saisie / édition paiements | Édition marchés | Exports | Archivage | Admin |
+|---|---|---|---|---|---|---|---|
+| **COGES** | Ses lots uniquement | Oui (les siennes) | Non | Non | Ses lots | Non | Non |
+| **Régional** | Sa région | Non (lecture + commentaires) | Non | Non | Sa région | Non | Non |
+| **National (MEN)** | Tous | Non | Oui | Oui | Tout | Non | Non |
+| **MEN — Décideur** (`men_viewer`) | Tous | Non | Non | Non | Tout | Non | Non |
+| **Admin** | Tous | Oui (toutes) | Oui | Oui | Tout | Oui | Oui |
 
-Permissions appliquées via **RLS Supabase** sur toutes les tables.
+- **MEN — Décideur (`men_viewer`)** : profil de consultation pour les décideurs. Accès en **lecture seule** identique au national (dashboard, suivi, marchés, carte, fiches, commentaires) + exports, **sans aucune action d'écriture** (aucun bouton de saisie / modification / suppression / archivage).
+- L'**édition des marchés** (création, modification) et l'**édition / suppression des paiements** sont ouvertes aux rôles **national** et **admin**.
+- L'**archivage / désarchivage** des établissements et des visites est réservé à l'**admin**.
+- Permissions appliquées via **RLS Supabase** sur toutes les tables (les boutons masqués côté interface ne sont qu'un second niveau ; la base reste le rempart).
 
 ---
 
@@ -172,8 +205,11 @@ Permissions appliquées via **RLS Supabase** sur toutes les tables.
 - Inscription par email + mot de passe (Supabase Auth)
 - Après inscription : saisie du profil (nom, téléphone, rôle souhaité)
 - Compte créé avec statut `en_attente` — aucun accès aux données avant validation
-- L'admin reçoit une notification email et valide le compte depuis l'interface admin
+- L'admin valide le compte (et fixe son rôle réel) depuis l'interface admin ; la liste d'administration met en tête les comptes en attente
+- *(La notification email automatique à l'admin lors d'une nouvelle inscription reste à activer — aucun fournisseur d'email configuré à ce stade ; cf. §8.)*
 - Session protégée par JWT Supabase
+
+> Le profil applicatif est créé par l'application à la première connexion (et non par un trigger sur `auth.users`), le projet Supabase étant mutualisé avec une autre application. La politique RLS force `statut_compte = en_attente` et `lot_ids = {}` : aucun privilège n'est auto-attribuable.
 
 ### 5.2 Interface COGES (mobile-first)
 - Liste des établissements attribués, avec statut et avancement visible d'un coup d'œil
@@ -183,7 +219,9 @@ Permissions appliquées via **RLS Supabase** sur toutes les tables.
   - Upload multi-photos (compression auto < 500 Ko)
   - Commentaire libre
   - Si statut = "arrêté" : raisons en multi-select + champ texte
-- **Mode offline :** formulaire utilisable sans connexion, données stockées en IndexedDB, badge + bouton "Synchroniser maintenant" visibles dès qu'une entrée est en attente. La background sync automatique est activée si le navigateur la supporte (Chrome Android) ; le bouton manuel est le mécanisme de base valable sur tous les navigateurs dont Safari iOS
+- **Édition d'une visite :** chaque visite de l'historique dispose d'un bouton « Modifier » (formulaire pré-rempli). Une visite en attente de synchronisation est corrigée localement ; une visite déjà synchronisée est mise à jour côté serveur.
+- **Mode offline :** formulaire (création **et** édition) utilisable sans connexion, données stockées en IndexedDB, badge + bouton "Synchroniser maintenant" visibles dès qu'une entrée est en attente. La background sync automatique est activée si le navigateur la supporte (Chrome Android) ; le bouton manuel est le mécanisme de base valable sur tous les navigateurs dont Safari iOS
+- **Navigation mobile :** barre latérale repliable (menu hamburger + overlay) sur petits écrans ; affichage fixe sur grand écran
 
 ### 5.3 Interface MEN — Dashboard national
 
@@ -201,6 +239,13 @@ Inspiré du PEEB Jordan : sidebar de navigation sombre (fond #1C1C2E ou similair
 - **Mode Avancement réel :** dégradé noir (0%) → rouge → orange → vert (100%)
 - Filtre par lot
 - Pop-up au clic : nom, statut, avancement physique, avancement financier, lien fiche
+- **Bouton « Agrandir » :** affichage de la carte en plein écran (sélecteur de mode conservé, bouton de fermeture)
+
+#### Bloc graphique : visites de chantiers par personnel
+- Diagramme à barres empilées : abscisse = temps, ordonnée = nombre de visites, couleur par visiteur
+- Regroupement temporel configurable : **jour / semaine / mois / trimestre**
+- Les visiteurs les plus actifs sont détaillés, les autres regroupés sous « Autres »
+- Exclut les visites archivées
 
 #### Vue "Tableau de suivi des chantiers"
 - Onglet dédié dans la navigation MEN
@@ -211,15 +256,20 @@ Inspiré du PEEB Jordan : sidebar de navigation sombre (fond #1C1C2E ou similair
 - Filtres multi-select : lot, région, statut, entreprise, province, département
 - Recherche textuelle : nom établissement, nom directeur, numéro de marché
 - Pagination serveur (20 lignes / page)
+- **Admin :** bouton « Nouvel établissement », colonne d'actions avec archivage / désarchivage par ligne, et bascule « Établissements archivés » pour consulter et restaurer les éléments archivés
+- Les établissements archivés sont masqués par défaut
 
 #### Vue "Marchés de travaux"
 - Tableau de tous les marchés (350 lignes, pagination serveur)
 - Colonnes : établissement, entreprise, numéro de marché, montant, date démarrage, date fin estimative, montant payé, avancement financier (%), reste à payer
 - Filtres multi-select : lot, province, entreprise, statut chantier
 - Recherche : nom établissement, numéro de marché
-- Bouton "Voir les paiements" par ligne : expand inline ou modale listant les paiements enregistrés
-- Bouton "Ajouter un paiement" (rôle MEN/admin uniquement) : formulaire date + montant + libellé
+- Bouton "Voir les paiements" par ligne : expand inline listant les paiements enregistrés
+- Saisie des paiements (rôle national/admin) : formulaire date + montant + libellé ; chaque paiement existant est **modifiable** et **supprimable** (avec confirmation)
+- **Édition du marché** (rôle national/admin) : entreprise, n°, montant, dates — formulaire inline dans la ligne dépliée ; ajout d'un marché possible depuis la fiche d'un établissement qui n'en a pas encore
+- **Vue groupée par n° de marché** (bascule) : regroupe les établissements partageant le même marché, avec montant total, montant payé et avancement financier agrégés, et le détail par établissement
 - Export Excel et PDF du tableau (filtre actif)
+- Les établissements archivés sont exclus de la vue
 
 ### 5.4 Interface Régionale
 - Sous-ensemble du dashboard MEN restreint à la région de l'utilisateur
@@ -238,11 +288,12 @@ Inspiré du PEEB Jordan : sidebar de navigation sombre (fond #1C1C2E ou similair
 - Les photos sont incluses dans les fiches de visite PDF/Word
 
 ### 5.6 Interface Admin
-- Validation des comptes `en_attente`, modification de rôle, suspension
+- Validation des comptes `en_attente`, modification de rôle (dont **MEN — Décideur**), suspension / réactivation
 - Attribution des lots à un COGES ou responsable régional
 - Gestion des lots (création, renommage, région)
-- Import en masse des établissements (CSV)
+- Import en masse des établissements (CSV) **et** création unitaire d'un établissement via formulaire
 - Modification directe des fiches établissements
+- **Archivage / désarchivage** des établissements (depuis le tableau de suivi) et des fiches de visite (depuis la fiche établissement) — alternative non destructive à la suppression
 
 ---
 
@@ -276,16 +327,20 @@ Inspiré du PEEB Jordan : sidebar de navigation sombre (fond #1C1C2E ou similair
 
 ---
 
-## 8. Hors périmètre (V1)
+## 8. Hors périmètre
 
+- Notification email à l'admin lors d'une nouvelle inscription (à activer une fois un fournisseur d'email configuré)
 - Notifications push
 - Messagerie interne
 - Intégration SIG externe
 - Multi-langue
+- Suppression définitive des établissements / visites (remplacée par l'archivage réversible)
 
 ---
 
 ## 9. Prompt de lancement — Claude Code
+
+> **Note :** ce prompt correspond au lancement initial de la **V1** (10 étapes) et est conservé à titre historique. Les évolutions ultérieures sont décrites au **§0 (Journal des versions)** et intégrées dans les sections fonctionnelles ci-dessus.
 
 ```
 Tu vas développer une application web complète de suivi de chantiers scolaires pour la Côte d'Ivoire, pour le Ministère de l'Éducation Nationale (MEN). L'AMO est Assemblage Ingénierie.
