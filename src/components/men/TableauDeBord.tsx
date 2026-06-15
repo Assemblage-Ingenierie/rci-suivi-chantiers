@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { BarChart3, Loader2, MapPin } from "lucide-react";
+import { BarChart3, Loader2, Maximize2, MapPin, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/lib/database.types";
 import {
@@ -50,6 +50,7 @@ export function TableauDeBord() {
   const [filtreLots, setFiltreLots] = useState<string[]>([]);
   const [filtreRegions, setFiltreRegions] = useState<string[]>([]);
   const [mode, setMode] = useState<ModeCarte>("statut");
+  const [pleinEcran, setPleinEcran] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -62,6 +63,7 @@ export function TableauDeBord() {
             .select(
               "id, nom, latitude, longitude, statut, dernier_avancement_reel_pct, avancement_financier_pct, montant_marche, montant_paye, lot_nom, lot_region"
             )
+            .eq("archive", false)
             .order("nom")
             .range(depuis, depuis + TAILLE_LOT - 1);
           if (error) throw new Error(error.message);
@@ -267,6 +269,13 @@ export function TableauDeBord() {
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setPleinEcran(true)}
+              title="Agrandir la carte"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-assemblage hover:text-assemblage"
+            >
+              <Maximize2 className="h-4 w-4" /> Agrandir
+            </button>
           </div>
           <CarteChantiers points={points} mode={mode} />
           {/* Légende */}
@@ -301,6 +310,51 @@ export function TableauDeBord() {
           </div>
         </div>
       </div>
+
+      {/* Carte en plein écran */}
+      {pleinEcran && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <MapPin className="h-4 w-4 text-assemblage" /> Carte des chantiers
+              <span className="rounded-full bg-assemblage px-2 py-0.5 text-xs font-bold text-white">
+                {points.length}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-gray-300 p-0.5">
+                {(
+                  [
+                    ["statut", "Statut"],
+                    ["avancement", "Avancement réel"],
+                  ] as [ModeCarte, string][]
+                ).map(([m, libelle]) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                      mode === m
+                        ? "bg-assemblage text-white"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {libelle}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setPleinEcran(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-gray-400"
+              >
+                <X className="h-4 w-4" /> Fermer
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1">
+            <CarteChantiers points={points} mode={mode} hauteur="100%" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,7 +19,7 @@ export default async function PageSuivi() {
         Une ligne par établissement (dernière visite) — dépliez pour voir
         toutes les visites
       </p>
-      <TableauSuivi />
+      <TableauSuivi role={profil.role} />
     </div>
   );
 }

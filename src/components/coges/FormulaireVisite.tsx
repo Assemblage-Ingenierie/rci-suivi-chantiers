@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Loader2, X } from "lucide-react";
+// Import STATIQUE (pas dynamic import) : la compression doit être disponible
+// hors ligne. Un import() dynamique crée un chunk séparé qui n'est pas garanti
+// en cache si l'utilisateur n'a jamais ouvert le formulaire en ligne → erreur
+// « Loading chunk failed ». Inclus dans le bundle /coges (mis en cache par le SW).
+import imageCompression from "browser-image-compression";
 import type { EtablissementSuivi, Visite, VisiteInsert } from "@/lib/offline/db";
 import { enregistrerVisite, mettreAJourVisite, type PhotoASauver } from "@/lib/offline/sync";
 import {
@@ -155,7 +160,6 @@ export function FormulaireVisite({
       // Nouveau — avec photos
       const photosCompressees: PhotoASauver[] = [];
       if (photos.length > 0) {
-        const imageCompression = (await import("browser-image-compression")).default;
         for (let i = 0; i < photos.length; i++) {
           setEtape(`Compression photo ${i + 1}/${photos.length}…`);
           const compressee = await imageCompression(photos[i].fichier, {

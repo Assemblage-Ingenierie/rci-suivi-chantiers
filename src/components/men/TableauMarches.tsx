@@ -38,9 +38,20 @@ import { exporterExcel, exporterTableauPDF } from "@/lib/exports/tableaux";
 import { horodatage } from "@/lib/exports/telecharger";
 import { BoutonExport } from "./BoutonExport";
 import { FiltreMultiple } from "./FiltreMultiple";
+import { GestionMarche } from "./GestionMarche";
+import { Layers } from "lucide-react";
 
 type Marche = Tables<"chantierci_v_marches_financier">;
 type Paiement = Tables<"chantierci_paiements">;
+
+interface GroupeMarche {
+  numero_marche: string;
+  nom_entreprise: string;
+  lignes: Marche[];
+  montant_total: number;
+  paye_total: number;
+  pct: number;
+}
 
 const PAGE_TAILLE = 20;
 
@@ -91,9 +102,11 @@ function valeurTexte(m: Marche, c: (typeof COLONNES_EXPORT)[number]): string {
 
 export function TableauMarches({
   peutSaisirPaiement,
+  peutEditerMarche,
   userId,
 }: {
   peutSaisirPaiement: boolean;
+  peutEditerMarche: boolean;
   userId: string;
 }) {
   const [lignes, setLignes] = useState<Marche[] | null>(null);
@@ -126,6 +139,9 @@ export function TableauMarches({
 
   const [marcheOuvert, setMarcheOuvert] = useState<string | null>(null);
   const [paiements, setPaiements] = useState<Paiement[] | null>(null);
+
+  const [vueGroupee, setVueGroupee] = useState(false);
+  const [groupes, setGroupes] = useState<GroupeMarche[] | null>(null);
 
   // Facettes (petites requêtes ciblées).
   useEffect(() => {
@@ -168,7 +184,8 @@ export function TableauMarches({
       const supabase = createClient();
       let q = supabase
         .from("chantierci_v_marches_financier")
-        .select("*", { count: "exact" });
+        .select("*", { count: "exact" })
+        .eq("etablissement_archive", false);
 
       if (filtres.lots.length) q = q.in("lot_id", filtres.lots);
       if (filtres.provinces.length) q = q.in("province", filtres.provinces);
@@ -234,7 +251,10 @@ export function TableauMarches({
     const tout: Marche[] = [];
     for (let depuis = 0; depuis < 2000; depuis += 500) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = supabase.from("chantierci_v_marches_financier").select("*");
+      let q: any = supabase
+        .from("chantierci_v_marches_financier")
+        .select("*")
+        .eq("etablissement_archive", false);
       if (filtres.lots.length) q = q.in("lot_id", filtres.lots);
       if (filtres.provinces.length) q = q.in("province", filtres.provinces);
       if (filtres.entreprises.length)
@@ -254,6 +274,39 @@ export function TableauMarches({
     }
     return tout;
   }, [filtres, rechercheActive, tri]);
+
+  // Vue groupée par n° de marché : un marché (entreprise + n°) peut couvrir
+  // plusieurs établissements, chacun avec son propre montant (CDC §5.3).
+  useEffect(() => {
+    if (!vueGroupee) return;
+    setGroupes(null);
+    (async () => {
+      const lignes = await chargerToutFiltre();
+      const parNumero = new Map<string, GroupeMarche>();
+      for (const m of lignes) {
+        const cle = `${m.numero_marche ?? "—"}|${m.nom_entreprise ?? ""}`;
+        const g: GroupeMarche =
+          parNumero.get(cle) ?? {
+            numero_marche: m.numero_marche ?? "—",
+            nom_entreprise: m.nom_entreprise ?? "—",
+            lignes: [],
+            montant_total: 0,
+            paye_total: 0,
+            pct: 0,
+          };
+        g.lignes.push(m);
+        g.montant_total += m.montant_marche ?? 0;
+        g.paye_total += m.montant_paye ?? 0;
+        parNumero.set(cle, g);
+      }
+      const liste = Array.from(parNumero.values()).map((g) => ({
+        ...g,
+        pct: g.montant_total > 0 ? Math.round((g.paye_total / g.montant_total) * 1000) / 10 : 0,
+      }));
+      liste.sort((a, b) => a.numero_marche.localeCompare(b.numero_marche));
+      setGroupes(liste);
+    })();
+  }, [vueGroupee, chargerToutFiltre]);
 
   const actionsExport = useMemo(
     () => [
@@ -339,6 +392,16 @@ export function TableauMarches({
           selection={filtres.statuts}
           surChangement={majFiltre("statuts")}
         />
+        <button
+          onClick={() => setVueGroupee((v) => !v)}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+            vueGroupee
+              ? "border-assemblage bg-assemblage text-white"
+              : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+          }`}
+        >
+          <Layers className="h-4 w-4" /> Grouper par n° de marché
+        </button>
         <div className="ml-auto">
           <BoutonExport actions={actionsExport} />
         </div>
@@ -350,6 +413,10 @@ export function TableauMarches({
         </p>
       )}
 
+      {vueGroupee ? (
+        <VueGroupee groupes={groupes} />
+      ) : (
+      <>
       <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -383,6 +450,7 @@ export function TableauMarches({
                 ouvert={marcheOuvert === m.id}
                 paiements={marcheOuvert === m.id ? paiements : null}
                 peutSaisirPaiement={peutSaisirPaiement}
+                peutEditerMarche={peutEditerMarche}
                 userId={userId}
                 surBascule={() => m.id && basculerPaiements(m.id)}
                 surPaiementAjoute={() => {
@@ -431,6 +499,97 @@ export function TableauMarches({
           </button>
         </div>
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+function VueGroupee({ groupes }: { groupes: GroupeMarche[] | null }) {
+  if (groupes === null) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl bg-white py-10 text-gray-500 shadow-sm">
+        <Loader2 className="h-5 w-5 animate-spin" /> Regroupement…
+      </div>
+    );
+  }
+  if (groupes.length === 0) {
+    return (
+      <p className="rounded-xl bg-white px-4 py-8 text-center text-sm text-gray-500 shadow-sm">
+        Aucun marché ne correspond aux critères.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {groupes.map((g) => (
+        <details
+          key={`${g.numero_marche}-${g.nom_entreprise}`}
+          className="overflow-hidden rounded-xl bg-white shadow-sm"
+        >
+          <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3 hover:bg-gray-50">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                {g.numero_marche}{" "}
+                <span className="font-normal text-gray-500">— {g.nom_entreprise}</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                {g.lignes.length} établissement(s)
+              </p>
+            </div>
+            <div className="text-right text-sm">
+              <p className="font-semibold">{formatXOF(g.montant_total)}</p>
+              <p className="text-xs text-gray-500">
+                payé {formatXOF(g.paye_total)} ·{" "}
+                <span className="font-semibold text-assemblage">{g.pct} %</span>
+              </p>
+            </div>
+          </summary>
+          <table className="w-full border-t border-gray-100 text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-2 font-medium">Établissement</th>
+                <th className="px-3 py-2 text-right font-medium">Montant</th>
+                <th className="px-3 py-2 text-right font-medium">Payé</th>
+                <th className="px-3 py-2 text-right font-medium">Av. fin.</th>
+                <th className="px-3 py-2 font-medium">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {g.lignes.map((m) => (
+                <tr key={m.id} className="border-t border-gray-50">
+                  <td className="px-4 py-2">
+                    {m.etablissement_id ? (
+                      <Link
+                        href={`/etablissements/${m.etablissement_id}`}
+                        className="font-medium hover:text-assemblage hover:underline"
+                      >
+                        {m.etablissement_nom}
+                      </Link>
+                    ) : (
+                      m.etablissement_nom
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {formatXOF(m.montant_marche)}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {formatXOF(m.montant_paye)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold text-assemblage">
+                    {m.avancement_financier_pct !== null
+                      ? `${m.avancement_financier_pct} %`
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <BadgeStatut statut={m.statut_etablissement} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      ))}
     </div>
   );
 }
@@ -441,6 +600,7 @@ function LigneMarche({
   ouvert,
   paiements,
   peutSaisirPaiement,
+  peutEditerMarche,
   userId,
   surBascule,
   surPaiementAjoute,
@@ -450,6 +610,7 @@ function LigneMarche({
   ouvert: boolean;
   paiements: Paiement[] | null;
   peutSaisirPaiement: boolean;
+  peutEditerMarche: boolean;
   userId: string;
   surBascule: () => void;
   surPaiementAjoute: () => void;
@@ -511,6 +672,22 @@ function LigneMarche({
       {ouvert && (
         <tr className="border-b border-gray-100 bg-red-50/40">
           <td colSpan={COLONNES.length + 2} className="px-6 py-4">
+            {peutEditerMarche && marche.etablissement_id && marche.id && (
+              <div className="mb-4">
+                <GestionMarche
+                  etablissementId={marche.etablissement_id}
+                  marche={{
+                    id: marche.id,
+                    nom_entreprise: marche.nom_entreprise,
+                    numero_marche: marche.numero_marche,
+                    montant_marche: marche.montant_marche,
+                    date_demarrage: marche.date_demarrage,
+                    date_fin_estimative: marche.date_fin_estimative,
+                  }}
+                  surSauvegarde={surPaiementAjoute}
+                />
+              </div>
+            )}
             <DetailPaiements
               marche={marche}
               paiements={paiements}

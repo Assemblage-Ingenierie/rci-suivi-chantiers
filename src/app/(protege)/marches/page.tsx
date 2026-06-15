@@ -21,6 +21,7 @@ export default async function PageMarches() {
       </p>
       <TableauMarches
         peutSaisirPaiement={profil.role === "national" || profil.role === "admin"}
+        peutEditerMarche={profil.role === "national" || profil.role === "admin"}
         userId={user.id}
       />
     </div>

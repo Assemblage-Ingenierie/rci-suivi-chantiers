@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getUtilisateurEtProfil } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { TableauDeBord } from "@/components/men/TableauDeBord";
+import { GraphiqueVisites } from "@/components/men/GraphiqueVisites";
 
 export const metadata = { title: "Tableau de bord — Suivi chantiers MEN CI" };
 
@@ -34,6 +35,9 @@ export default async function PageTableauDeBord() {
       <h1 className="text-2xl font-bold">Tableau de bord</h1>
       <p className="mb-6 text-sm text-gray-500">{sousTitre}</p>
       <TableauDeBord />
+      <div className="mt-4">
+        <GraphiqueVisites />
+      </div>
     </div>
   );
 }

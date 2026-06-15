@@ -9,7 +9,13 @@ export const LIBELLES_ROLES: Record<RoleUtilisateur, string> = {
   regional: "Responsable régional",
   national: "MEN — National",
   admin: "Administrateur",
+  men_viewer: "MEN — Décideur (lecture)",
 };
+
+/** Rôle décideur en lecture seule : voit tout, ne modifie rien. */
+export function estLectureSeule(role: RoleUtilisateur): boolean {
+  return role === "men_viewer";
+}
 
 export const LIBELLES_STATUTS_CHANTIER: Record<StatutChantier, string> = {
   non_demarre: "Non démarré",

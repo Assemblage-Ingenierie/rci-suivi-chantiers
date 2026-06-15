@@ -25,7 +25,13 @@ import {
 type Profil = Tables<"chantierci_profiles">;
 type Lot = Tables<"chantierci_lots">;
 
-const ROLES: RoleUtilisateur[] = ["coges", "regional", "national", "admin"];
+const ROLES: RoleUtilisateur[] = [
+  "coges",
+  "regional",
+  "national",
+  "men_viewer",
+  "admin",
+];
 
 const BADGES_STATUT: Record<StatutCompte, { libelle: string; classe: string }> = {
   en_attente: { libelle: "En attente", classe: "bg-amber-100 text-amber-800" },

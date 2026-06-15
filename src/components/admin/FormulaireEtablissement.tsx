@@ -1,46 +1,35 @@
 "use client";
 
-/** Modification directe d'une fiche établissement (CDC §5.6, admin). */
+/** Création / modification d'une fiche établissement (CDC §5.6, admin). */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/lib/database.types";
-import {
-  LIBELLES_STATUTS_CHANTIER,
-  type StatutChantier,
-} from "@/lib/constants";
 
 type Etablissement = Tables<"chantierci_etablissements">;
 type Lot = Tables<"chantierci_lots">;
-
-const STATUTS: StatutChantier[] = [
-  "non_demarre",
-  "en_cours",
-  "arrete",
-  "receptionne",
-];
 
 export function FormulaireEtablissement({
   etablissement,
   lots,
 }: {
-  etablissement: Etablissement;
+  etablissement?: Etablissement;
   lots: Lot[];
 }) {
   const router = useRouter();
+  const modeCreation = !etablissement;
   const [valeurs, setValeurs] = useState({
-    nom: etablissement.nom,
-    nom_directeur: etablissement.nom_directeur ?? "",
-    telephone: etablissement.telephone ?? "",
-    email: etablissement.email ?? "",
-    latitude: etablissement.latitude?.toString() ?? "",
-    longitude: etablissement.longitude?.toString() ?? "",
-    province: etablissement.province ?? "",
-    departement: etablissement.departement ?? "",
-    village: etablissement.village ?? "",
-    lot_id: etablissement.lot_id ?? "",
-    statut: etablissement.statut,
+    nom: etablissement?.nom ?? "",
+    nom_directeur: etablissement?.nom_directeur ?? "",
+    telephone: etablissement?.telephone ?? "",
+    email: etablissement?.email ?? "",
+    latitude: etablissement?.latitude?.toString() ?? "",
+    longitude: etablissement?.longitude?.toString() ?? "",
+    province: etablissement?.province ?? "",
+    departement: etablissement?.departement ?? "",
+    village: etablissement?.village ?? "",
+    lot_id: etablissement?.lot_id ?? "",
   });
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -60,30 +49,39 @@ export function FormulaireEtablissement({
         if (!Number.isFinite(n)) throw new Error("Coordonnées GPS invalides.");
         return n;
       };
+      const champs = {
+        nom: valeurs.nom.trim(),
+        nom_directeur: valeurs.nom_directeur.trim() || null,
+        telephone: valeurs.telephone.trim() || null,
+        email: valeurs.email.trim() || null,
+        latitude: nombre(valeurs.latitude),
+        longitude: nombre(valeurs.longitude),
+        province: valeurs.province.trim() || null,
+        departement: valeurs.departement.trim() || null,
+        village: valeurs.village.trim() || null,
+        lot_id: valeurs.lot_id || null,
+      };
       const supabase = createClient();
-      const { error } = await supabase
-        .from("chantierci_etablissements")
-        .update({
-          nom: valeurs.nom.trim(),
-          nom_directeur: valeurs.nom_directeur.trim() || null,
-          telephone: valeurs.telephone.trim() || null,
-          email: valeurs.email.trim() || null,
-          latitude: nombre(valeurs.latitude),
-          longitude: nombre(valeurs.longitude),
-          province: valeurs.province.trim() || null,
-          departement: valeurs.departement.trim() || null,
-          village: valeurs.village.trim() || null,
-          lot_id: valeurs.lot_id || null,
-          statut: valeurs.statut,
-        })
-        .eq("id", etablissement.id);
-      if (error) throw new Error(error.message);
-      router.push(`/etablissements/${etablissement.id}`);
+
+      if (modeCreation) {
+        const { data, error } = await supabase
+          .from("chantierci_etablissements")
+          .insert(champs)
+          .select("id")
+          .single();
+        if (error) throw new Error(error.message);
+        router.push(`/etablissements/${data.id}`);
+      } else {
+        const { error } = await supabase
+          .from("chantierci_etablissements")
+          .update(champs)
+          .eq("id", etablissement!.id);
+        if (error) throw new Error(error.message);
+        router.push(`/etablissements/${etablissement!.id}`);
+      }
       router.refresh();
     } catch (err) {
-      setErreur(
-        err instanceof Error ? err.message : "Enregistrement impossible."
-      );
+      setErreur(err instanceof Error ? err.message : "Enregistrement impossible.");
       setEnCours(false);
     }
   }
@@ -91,11 +89,7 @@ export function FormulaireEtablissement({
   const classChamp =
     "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage";
 
-  const champs: {
-    cle: keyof typeof valeurs;
-    libelle: string;
-    requis?: boolean;
-  }[] = [
+  const champs: { cle: keyof typeof valeurs; libelle: string; requis?: boolean }[] = [
     { cle: "nom", libelle: "Nom de l'établissement", requis: true },
     { cle: "nom_directeur", libelle: "Directeur" },
     { cle: "telephone", libelle: "Téléphone" },
@@ -107,11 +101,11 @@ export function FormulaireEtablissement({
     { cle: "village", libelle: "Village" },
   ];
 
+  const annuler = () =>
+    router.push(modeCreation ? "/suivi" : `/etablissements/${etablissement!.id}`);
+
   return (
-    <form
-      onSubmit={enregistrer}
-      className="rounded-xl bg-white p-5 shadow-sm"
-    >
+    <form onSubmit={enregistrer} className="rounded-xl bg-white p-5 shadow-sm">
       <div className="grid gap-4 sm:grid-cols-2">
         {champs.map(({ cle, libelle, requis }) => (
           <div key={cle} className={cle === "nom" ? "sm:col-span-2" : ""}>
@@ -146,24 +140,12 @@ export function FormulaireEtablissement({
             ))}
           </select>
         </div>
-        <div>
-          <label htmlFor="statut" className="mb-1 block text-sm font-medium">
-            Statut
-          </label>
-          <select
-            id="statut"
-            value={valeurs.statut}
-            onChange={maj("statut")}
-            className={classChamp}
-          >
-            {STATUTS.map((s) => (
-              <option key={s} value={s}>
-                {LIBELLES_STATUTS_CHANTIER[s]}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
+
+      <p className="mt-4 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+        Le statut du chantier (non démarré / en cours / arrêté / réceptionné) est
+        déterminé automatiquement par la dernière visite enregistrée.
+      </p>
 
       {erreur && (
         <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -174,7 +156,7 @@ export function FormulaireEtablissement({
       <div className="mt-5 flex gap-3">
         <button
           type="button"
-          onClick={() => router.push(`/etablissements/${etablissement.id}`)}
+          onClick={annuler}
           disabled={enCours}
           className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
@@ -185,12 +167,8 @@ export function FormulaireEtablissement({
           disabled={enCours}
           className="inline-flex items-center gap-2 rounded-lg bg-assemblage px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
         >
-          {enCours ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Enregistrer
+          {enCours ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {modeCreation ? "Créer l'établissement" : "Enregistrer"}
         </button>
       </div>
     </form>

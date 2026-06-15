@@ -27,6 +27,7 @@ export async function prechargerDonneesLot(): Promise<{
     const { data, error } = await supabase
       .from("chantierci_v_etablissements_suivi")
       .select("*")
+      .eq("archive", false)
       .order("nom")
       .range(depuis, depuis + TAILLE_LOT - 1);
     if (error) throw error;
@@ -40,6 +41,7 @@ export async function prechargerDonneesLot(): Promise<{
     const { data, error } = await supabase
       .from("chantierci_visites")
       .select("*")
+      .eq("archive", false)
       .order("date_visite", { ascending: false })
       .range(depuis, depuis + TAILLE_LOT - 1);
     if (error) throw error;

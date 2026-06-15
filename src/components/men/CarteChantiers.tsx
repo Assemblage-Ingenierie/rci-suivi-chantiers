@@ -54,7 +54,7 @@ export function CarteChantiers({
 }: {
   points: PointCarte[];
   mode: ModeCarte;
-  hauteur?: number;
+  hauteur?: number | string;
 }) {
   const refConteneur = useRef<HTMLDivElement>(null);
   const refCarte = useRef<L.Map | null>(null);
@@ -73,7 +73,13 @@ export function CarteChantiers({
     refCarte.current = carte;
     // Le conteneur vient d'être dimensionné par le layout.
     setTimeout(() => carte.invalidateSize(), 100);
+
+    // Recalcule la taille quand le conteneur change (plein écran, mobile…).
+    const observer = new ResizeObserver(() => carte.invalidateSize());
+    observer.observe(refConteneur.current);
+
     return () => {
+      observer.disconnect();
       carte.remove();
       refCarte.current = null;
       refCouche.current = null;

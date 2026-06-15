@@ -5,6 +5,11 @@ import { getUtilisateurEtProfil } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { BadgeStatut } from "@/components/BadgeStatut";
 import { Commentaires } from "@/components/men/Commentaires";
+import { GestionMarche } from "@/components/men/GestionMarche";
+import {
+  BoutonArchiveVisite,
+  VisitesArchivees,
+} from "@/components/men/ArchiveVisites";
 import {
   BoutonsExportVisite,
   ExportsVisitesBatch,
@@ -49,11 +54,15 @@ export default async function PageFicheEtablissement({
     .maybeSingle();
   if (!etablissement) notFound();
 
+  const peutEditerMarche = profil.role === "national" || profil.role === "admin";
+  const estAdmin = profil.role === "admin";
+
   const [{ data: visites }, { data: paiements }] = await Promise.all([
     supabase
       .from("chantierci_visites")
       .select("*")
       .eq("etablissement_id", params.id)
+      .eq("archive", false)
       .order("date_visite", { ascending: false })
       .range(0, 99),
     etablissement.marche_id
@@ -146,7 +155,7 @@ export default async function PageFicheEtablissement({
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
             Marché de travaux
           </h2>
-          {etablissement.numero_marche ? (
+          {etablissement.marche_id ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-gray-500">Entreprise</dt>
               <dd className="font-medium">{etablissement.nom_entreprise}</dd>
@@ -170,6 +179,25 @@ export default async function PageFicheEtablissement({
             </dl>
           ) : (
             <p className="text-sm text-gray-500">Aucun marché enregistré.</p>
+          )}
+          {peutEditerMarche && (
+            <div className="mt-3">
+              <GestionMarche
+                etablissementId={params.id}
+                marche={
+                  etablissement.marche_id
+                    ? {
+                        id: etablissement.marche_id,
+                        nom_entreprise: etablissement.nom_entreprise,
+                        numero_marche: etablissement.numero_marche,
+                        montant_marche: etablissement.montant_marche,
+                        date_demarrage: etablissement.date_demarrage,
+                        date_fin_estimative: etablissement.date_fin_estimative,
+                      }
+                    : null
+                }
+              />
+            </div>
           )}
         </div>
       </div>
@@ -252,6 +280,7 @@ export default async function PageFicheEtablissement({
                   }}
                   visite={v}
                 />
+                {estAdmin && <BoutonArchiveVisite visiteId={v.id} />}
                 <BadgeStatut statut={v.statut_chantier} />
               </div>
             </div>
@@ -310,6 +339,8 @@ export default async function PageFicheEtablissement({
           Aucune visite enregistrée.
         </p>
       )}
+
+      {estAdmin && <VisitesArchivees etablissementId={params.id} />}
     </div>
   );
 }

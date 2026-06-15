@@ -10,6 +10,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDown,
   ArrowUp,
   ChevronDown,
@@ -18,6 +20,7 @@ import {
   ChevronUp,
   Columns3,
   Loader2,
+  Plus,
   Search,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +31,7 @@ import {
   formatDate,
   formatXOF,
   LIBELLES_STATUTS_CHANTIER,
+  type RoleUtilisateur,
 } from "@/lib/constants";
 import { exporterExcel, exporterTableauPDF } from "@/lib/exports/tableaux";
 import { horodatage } from "@/lib/exports/telecharger";
@@ -115,12 +119,15 @@ interface Facettes {
   departements: string[];
 }
 
-export function TableauSuivi() {
+export function TableauSuivi({ role }: { role: RoleUtilisateur }) {
+  const estAdmin = role === "admin";
   const [lignes, setLignes] = useState<Ligne[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [voirArchives, setVoirArchives] = useState(false);
+  const [archivageEnCours, setArchivageEnCours] = useState<string | null>(null);
 
   const [recherche, setRecherche] = useState("");
   const rechercheDebounce = useRef<ReturnType<typeof setTimeout>>();
@@ -226,7 +233,8 @@ export function TableauSuivi() {
       const supabase = createClient();
       let q = supabase
         .from("chantierci_v_etablissements_suivi")
-        .select("*", { count: "exact" });
+        .select("*", { count: "exact" })
+        .eq("archive", voirArchives);
 
       if (filtres.lots.length) q = q.in("lot_nom", filtres.lots);
       if (filtres.regions.length) q = q.in("lot_region", filtres.regions);
@@ -259,7 +267,24 @@ export function TableauSuivi() {
     } finally {
       setChargement(false);
     }
-  }, [filtres, rechercheActive, tri, page]);
+  }, [filtres, rechercheActive, tri, page, voirArchives]);
+
+  async function basculerArchive(id: string, archive: boolean) {
+    setArchivageEnCours(id);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("chantierci_etablissements")
+        .update({ archive })
+        .eq("id", id);
+      if (error) throw new Error(error.message);
+      await charger();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Archivage impossible");
+    } finally {
+      setArchivageEnCours(null);
+    }
+  }
 
   useEffect(() => {
     charger();
@@ -277,7 +302,10 @@ export function TableauSuivi() {
     const tout: Ligne[] = [];
     for (let depuis = 0; depuis < 2000; depuis += 500) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = supabase.from("chantierci_v_etablissements_suivi").select("*");
+      let q: any = supabase
+        .from("chantierci_v_etablissements_suivi")
+        .select("*")
+        .eq("archive", voirArchives);
       if (filtres.lots.length) q = q.in("lot_nom", filtres.lots);
       if (filtres.regions.length) q = q.in("lot_region", filtres.regions);
       if (filtres.statuts.length) q = q.in("statut", filtres.statuts);
@@ -300,7 +328,7 @@ export function TableauSuivi() {
       if (!data || data.length < 500) break;
     }
     return tout;
-  }, [filtres, rechercheActive, tri]);
+  }, [filtres, rechercheActive, tri, voirArchives]);
 
   const actionsExport = useMemo(() => {
     const colonnes = COLONNES.filter((c) => visibles.has(c.cle));
@@ -345,6 +373,7 @@ export function TableauSuivi() {
       .from("chantierci_visites")
       .select("*")
       .eq("etablissement_id", etablissementId)
+      .eq("archive", false)
       .order("date_visite", { ascending: false })
       .range(0, 49);
     setVisitesOuvertes(data ?? []);
@@ -392,6 +421,30 @@ export function TableauSuivi() {
         <FiltreMultiple libelle="Province" options={facettes.provinces.map((v) => ({ valeur: v }))} selection={filtres.provinces} surChangement={majFiltre("provinces")} />
         <FiltreMultiple libelle="Département" options={facettes.departements.map((v) => ({ valeur: v }))} selection={filtres.departements} surChangement={majFiltre("departements")} />
 
+        {estAdmin && (
+          <button
+            onClick={() => {
+              setPage(0);
+              setVoirArchives((v) => !v);
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+              voirArchives
+                ? "border-assemblage bg-assemblage text-white"
+                : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+            }`}
+          >
+            <Archive className="h-4 w-4" />
+            {voirArchives ? "Archivés" : "Établissements archivés"}
+          </button>
+        )}
+        {estAdmin && !voirArchives && (
+          <Link
+            href="/etablissements/nouveau"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-assemblage px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+          >
+            <Plus className="h-4 w-4" /> Nouvel établissement
+          </Link>
+        )}
         <div className="ml-auto">
           <BoutonExport actions={actionsExport} />
         </div>
@@ -451,6 +504,7 @@ export function TableauSuivi() {
                   </button>
                 </th>
               ))}
+              {estAdmin && <th className="px-3 py-3 text-right font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -463,12 +517,17 @@ export function TableauSuivi() {
                 ouverte={ligneOuverte === ligne.id}
                 visites={ligneOuverte === ligne.id ? visitesOuvertes : null}
                 surBascule={() => ligne.id && basculerVisites(ligne.id)}
+                estAdmin={estAdmin}
+                archivageEnCours={archivageEnCours === ligne.id}
+                surArchive={() =>
+                  ligne.id && basculerArchive(ligne.id, !ligne.archive)
+                }
               />
             ))}
             {!chargement && (lignes ?? []).length === 0 && (
               <tr>
                 <td
-                  colSpan={colonnesAffichees.length + 1}
+                  colSpan={colonnesAffichees.length + 1 + (estAdmin ? 1 : 0)}
                   className="px-4 py-8 text-center text-gray-500"
                 >
                   Aucun établissement ne correspond aux critères.
@@ -517,6 +576,9 @@ function LigneTableau({
   ouverte,
   visites,
   surBascule,
+  estAdmin,
+  archivageEnCours,
+  surArchive,
 }: {
   ligne: Ligne;
   colonnes: Colonne[];
@@ -524,6 +586,9 @@ function LigneTableau({
   ouverte: boolean;
   visites: Visite[] | null;
   surBascule: () => void;
+  estAdmin: boolean;
+  archivageEnCours: boolean;
+  surArchive: () => void;
 }) {
   return (
     <>
@@ -555,10 +620,29 @@ function LigneTableau({
             )}
           </td>
         ))}
+        {estAdmin && (
+          <td className="px-3 py-2.5 text-right">
+            <button
+              onClick={surArchive}
+              disabled={archivageEnCours}
+              title={ligne.archive ? "Désarchiver" : "Archiver"}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900 disabled:opacity-50"
+            >
+              {archivageEnCours ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : ligne.archive ? (
+                <ArchiveRestore className="h-3.5 w-3.5" />
+              ) : (
+                <Archive className="h-3.5 w-3.5" />
+              )}
+              {ligne.archive ? "Désarchiver" : "Archiver"}
+            </button>
+          </td>
+        )}
       </tr>
       {ouverte && (
         <tr className="border-b border-gray-100 bg-red-50/40">
-          <td colSpan={colonnes.length + 1} className="px-6 py-3">
+          <td colSpan={colonnes.length + 1 + (estAdmin ? 1 : 0)} className="px-6 py-3">
             {visites === null ? (
               <span className="inline-flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" /> Chargement des

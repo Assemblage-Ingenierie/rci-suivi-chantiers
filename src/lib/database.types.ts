@@ -224,6 +224,7 @@ export type Database = {
       }
       chantierci_etablissements: {
         Row: {
+          archive: boolean
           created_at: string
           departement: string | null
           email: string | null
@@ -239,6 +240,7 @@ export type Database = {
           village: string | null
         }
         Insert: {
+          archive?: boolean
           created_at?: string
           departement?: string | null
           email?: string | null
@@ -254,6 +256,7 @@ export type Database = {
           village?: string | null
         }
         Update: {
+          archive?: boolean
           created_at?: string
           departement?: string | null
           email?: string | null
@@ -487,6 +490,7 @@ export type Database = {
       }
       chantierci_visites: {
         Row: {
+          archive: boolean
           avancement_reel_pct: number | null
           commentaire: string | null
           created_at: string
@@ -507,6 +511,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          archive?: boolean
           avancement_reel_pct?: number | null
           commentaire?: string | null
           created_at?: string
@@ -527,6 +532,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          archive?: boolean
           avancement_reel_pct?: number | null
           commentaire?: string | null
           created_at?: string
@@ -659,6 +665,7 @@ export type Database = {
       }
       chantierci_v_etablissements_suivi: {
         Row: {
+          archive: boolean | null
           avancement_financier_pct: number | null
           created_at: string | null
           date_demarrage: string | null
@@ -710,6 +717,7 @@ export type Database = {
           date_demarrage: string | null
           date_fin_estimative: string | null
           departement: string | null
+          etablissement_archive: boolean | null
           etablissement_id: string | null
           etablissement_nom: string | null
           id: string | null
@@ -776,7 +784,12 @@ export type Database = {
         | "receptionne"
       chantierci_statut_compte: "en_attente" | "actif" | "suspendu"
       chantierci_sync_status: "synced" | "pending_sync"
-      chantierci_user_role: "coges" | "regional" | "national" | "admin"
+      chantierci_user_role:
+        | "coges"
+        | "regional"
+        | "national"
+        | "admin"
+        | "men_viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -912,7 +925,13 @@ export const Constants = {
       ],
       chantierci_statut_compte: ["en_attente", "actif", "suspendu"],
       chantierci_sync_status: ["synced", "pending_sync"],
-      chantierci_user_role: ["coges", "regional", "national", "admin"],
+      chantierci_user_role: [
+        "coges",
+        "regional",
+        "national",
+        "admin",
+        "men_viewer",
+      ],
     },
   },
 } as const
