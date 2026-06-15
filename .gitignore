@@ -19,3 +19,6 @@ next-env.d.ts
 # tooling local
 .claude/
 .vercel
+
+# fichiers temporaires Word
+~$*
