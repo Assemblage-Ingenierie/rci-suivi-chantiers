@@ -10,6 +10,48 @@ import type { PosteDef, StatutChantier, ValeursPostes } from "@/lib/formulaires/
 import { avancementOuvrage, ouvrageLatrines, postesApplicables } from "@/lib/formulaires/avancement";
 
 export type EtatSite = Database["public"]["Views"]["chantierci_v_etat_sites"]["Row"];
+
+/**
+ * Colonnes de la vue lues par chaque page. Jamais « * » : les réponses
+ * complètes des formulaires (≈ 330 Ko pour 387 sites) ne sont lues que là où
+ * elles servent, et ne sont pas envoyées telles quelles au navigateur.
+ */
+export const COLONNES_SITES = {
+  suivi: "id, code, nom, localite, lot_id, lot_moe_id, moe_statut",
+  difficultes:
+    "id, code, nom, localite, lot_id, lot_moe_id, moe_statut, moe_date, moe_avancement, moe_arrete_depuis, moe_reponses, ug_date, ug_avancement, ug_avancement_moe_compare, ecart_ug_moe, discordance, ug_reponses, cstc_date, cstc_reponses",
+  tableau:
+    "id, code, nom, departement, localite, lot_id, lot_moe_id, electricite, type_latrines, latitude, longitude, origine_position, moe_statut, moe_date, moe_avancement, moe_postes, moe_arrete_depuis, moe_reponses, ug_date, ug_avancement, ug_avancement_moe_compare, ecart_ug_moe, discordance, ug_reponses, cstc_date, cstc_reponses",
+} as const;
+
+/** Site tel qu'envoyé à l'onglet Suivi. */
+export type SiteSuivi = Pick<EtatSite, "id" | "code" | "nom" | "localite" | "lot_id" | "lot_moe_id" | "moe_statut">;
+
+/** Site tel qu'envoyé au tableau de bord (sans les réponses des formulaires). */
+export type SiteTableau = Pick<
+  EtatSite,
+  | "id"
+  | "code"
+  | "nom"
+  | "departement"
+  | "localite"
+  | "lot_id"
+  | "lot_moe_id"
+  | "electricite"
+  | "type_latrines"
+  | "latitude"
+  | "longitude"
+  | "origine_position"
+  | "moe_statut"
+  | "moe_date"
+  | "moe_avancement"
+  | "moe_postes"
+  | "ecart_ug_moe"
+  | "discordance"
+> & {
+  /** Au moins une difficulté sérieuse (gravité ≥ 2), calculé côté serveur. */
+  a_suivre: boolean;
+};
 export type LotRef = { id: number; nom: string; poids: number; entreprise_titulaire: string };
 
 export type SyntheseLot = {
@@ -25,11 +67,14 @@ export type SyntheseLot = {
 
 const moyenne = (valeurs: number[]) => (valeurs.length ? valeurs.reduce((a, b) => a + b, 0) / valeurs.length : null);
 
-export const avancementMoe = (s: EtatSite) => (s.moe_avancement === null ? 0 : Number(s.moe_avancement));
+export const avancementMoe = (s: Pick<EtatSite, "moe_avancement">) => (s.moe_avancement === null ? 0 : Number(s.moe_avancement));
 
 export const TERMINES: StatutChantier[] = ["termine", "receptionne"];
 
-export function syntheseLots(sites: EtatSite[], lots: LotRef[]): SyntheseLot[] {
+export function syntheseLots(
+  sites: Pick<EtatSite, "lot_id" | "moe_avancement" | "moe_statut">[],
+  lots: LotRef[]
+): SyntheseLot[] {
   return lots
     .map((lot) => {
       const duLot = sites.filter((s) => s.lot_id === lot.id);
@@ -58,7 +103,7 @@ export function avancementGlobal(lots: SyntheseLot[]): number | null {
  * type) sur les sites, puis des latrines (ouvrage complet).
  */
 export function avancementParCorpsEtat(
-  sites: EtatSite[],
+  sites: Pick<EtatSite, "electricite" | "type_latrines" | "moe_postes">[],
   postes: PosteDef[]
 ): { code: string; libelle: string; poids: number | null; valeur: number }[] {
   const lignes = postesApplicables(postes, "classe", true).map((p) => {

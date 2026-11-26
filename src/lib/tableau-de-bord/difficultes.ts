@@ -27,6 +27,29 @@ export const TYPES_DIFFICULTE: { cle: TypeDifficulte; libelle: string; descripti
 
 export type Difficulte = { type: TypeDifficulte; texte: string };
 
+/** Colonnes de la vue nécessaires pour déduire les difficultés d'un site. */
+export type DonneesDifficultes = Pick<
+  EtatSite,
+  | "moe_statut"
+  | "moe_date"
+  | "moe_arrete_depuis"
+  | "moe_reponses"
+  | "ug_date"
+  | "ug_avancement"
+  | "ug_avancement_moe_compare"
+  | "ecart_ug_moe"
+  | "discordance"
+  | "ug_reponses"
+  | "cstc_date"
+  | "cstc_reponses"
+>;
+
+/** Site tel qu'envoyé à l'onglet Difficultés : difficultés déjà calculées côté serveur. */
+export type SiteDifficultes = Pick<
+  EtatSite,
+  "id" | "code" | "nom" | "localite" | "lot_id" | "lot_moe_id" | "moe_statut" | "moe_avancement"
+> & { difficultes: Difficulte[] };
+
 type Reponses = Record<string, unknown>;
 const rep = (j: unknown): Reponses => (j && typeof j === "object" && !Array.isArray(j) ? (j as Reponses) : {});
 const liste = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
@@ -51,7 +74,7 @@ function elementsNonConformes(r: Reponses): string[] {
   return q.elements.filter((e) => valeurs[e.valeur] === "non_conforme").map((e) => e.libelle);
 }
 
-export function difficultesSite(s: EtatSite, aujourdhui = new Date()): Difficulte[] {
+export function difficultesSite(s: DonneesDifficultes, aujourdhui = new Date()): Difficulte[] {
   const d: Difficulte[] = [];
   const moe = rep(s.moe_reponses);
 
@@ -106,3 +129,7 @@ export function difficultesSite(s: EtatSite, aujourdhui = new Date()): Difficult
 /** Score de gravité d'un site (tri de la liste des difficultés). */
 export const gravite = (d: Difficulte[]) =>
   d.reduce((a, x) => a + (TYPES_DIFFICULTE.find((t) => t.cle === x.type)?.gravite ?? 0), 0);
+
+/** Site à suivre : au moins une difficulté sérieuse (gravité ≥ 2 : arrêt, problème MOE, écart, rapport manquant). */
+export const aSuivre = (d: Difficulte[]) =>
+  d.some((x) => (TYPES_DIFFICULTE.find((t) => t.cle === x.type)?.gravite ?? 0) >= 2);

@@ -32,6 +32,8 @@ type VisiteRow = {
   created_at: string
   updated_at: string
   modifie_par: string | null
+  /** Avancement (%) calculé par la base à l'enregistrement (MOE, UG ; null pour le CSTC). */
+  avancement: number | null
 }
 
 export type Database = {

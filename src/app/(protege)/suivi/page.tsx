@@ -1,6 +1,6 @@
 import { exigerRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { dateLongue, type EtatSite } from "@/lib/tableau-de-bord/calculs";
+import { COLONNES_SITES, dateLongue, type SiteSuivi } from "@/lib/tableau-de-bord/calculs";
 import { NB_SEMAINES, SOURCES_SUIVI, type LigneRemplissage } from "@/lib/suivi/remplissage";
 import type { SourceFormulaire } from "@/lib/formulaires/types";
 import { SuiviRemplissage } from "@/components/suivi/SuiviRemplissage";
@@ -18,7 +18,7 @@ export default async function PageSuivi({
   await exigerRole(["ug", "admin"]);
   const supabase = createClient();
   const [{ data: sites }, { data: lots }, { data: lotsMoe }, { data: remplissage, error }] = await Promise.all([
-    supabase.from("chantierci_v_etat_sites").select("*").order("code").range(0, 999),
+    supabase.from("chantierci_v_etat_sites").select(COLONNES_SITES.suivi).order("code").range(0, 999),
     supabase.from("chantierci_lots").select("id, nom").order("id"),
     supabase.from("chantierci_lots_moe").select("id, nom, regions").order("id"),
     supabase.rpc("chantierci_remplissage", { p_semaines: NB_SEMAINES }),
@@ -42,7 +42,7 @@ export default async function PageSuivi({
         </EnPreparation>
       ) : (
         <SuiviRemplissage
-          sites={(sites ?? []) as EtatSite[]}
+          sites={(sites ?? []) as SiteSuivi[]}
           lots={lots ?? []}
           lotsMoe={lotsMoe ?? []}
           remplissage={(remplissage ?? []) as LigneRemplissage[]}

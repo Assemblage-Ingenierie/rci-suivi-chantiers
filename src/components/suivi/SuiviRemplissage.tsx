@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { BadgeStatut } from "@/components/BadgeStatut";
-import { joursDepuis, pct, type EtatSite } from "@/lib/tableau-de-bord/calculs";
+import { joursDepuis, pct, type SiteSuivi } from "@/lib/tableau-de-bord/calculs";
 import {
   attendu,
   dernier,
@@ -90,7 +90,7 @@ export function SuiviRemplissage({
   remplissage,
   initial,
 }: {
-  sites: EtatSite[];
+  sites: SiteSuivi[];
   lots: Lot[];
   lotsMoe: LotMoe[];
   remplissage: LigneRemplissage[];
@@ -136,7 +136,7 @@ export function SuiviRemplissage({
   }, [sites, lotMoe, lot, tousSites, recherche, retardSeul, sourcesRetard, parSite]);
 
   const groupes = useMemo(() => {
-    const m = new Map<number, EtatSite[]>();
+    const m = new Map<number, SiteSuivi[]>();
     for (const s of visibles) m.set(s.lot_id, [...(m.get(s.lot_id) ?? []), s]);
     return [...m.entries()].sort((a, b) => a[0] - b[0]);
   }, [visibles]);

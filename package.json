@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:db": "node supabase/tests/rls.test.mjs && node supabase/tests/formulaires.test.mjs && node supabase/tests/donnees-fictives.test.mjs && node supabase/tests/tableau-de-bord.test.mjs && node supabase/tests/suivi.test.mjs && node supabase/tests/installation.test.mjs",
+    "test:db": "node supabase/tests/rls.test.mjs && node supabase/tests/formulaires.test.mjs && node supabase/tests/donnees-fictives.test.mjs && node supabase/tests/tableau-de-bord.test.mjs && node supabase/tests/suivi.test.mjs && node supabase/tests/performances.test.mjs && node supabase/tests/installation.test.mjs",
     "referentiel": "node scripts/generer-referentiel.mjs",
     "installation": "node scripts/generer-installation.mjs"
   },

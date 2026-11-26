@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, MessageSquare, Search } from "lucide-react";
 import { BadgeStatut } from "@/components/BadgeStatut";
-import { avancementMoe, dateCourte, pct, type EtatSite } from "@/lib/tableau-de-bord/calculs";
+import { avancementMoe, dateCourte, pct } from "@/lib/tableau-de-bord/calculs";
 import {
-  difficultesSite,
   gravite,
   TYPES_DIFFICULTE,
   type Difficulte,
+  type SiteDifficultes,
   type TypeDifficulte,
 } from "@/lib/tableau-de-bord/difficultes";
 
@@ -35,7 +35,7 @@ export function ListeDifficultes({
   commentaires,
   initial,
 }: {
-  sites: EtatSite[];
+  sites: SiteDifficultes[];
   lots: Lot[];
   lotsMoe: LotMoe[];
   commentaires: DernierCommentaire[];
@@ -69,7 +69,7 @@ export function ListeDifficultes({
     return sites
       .filter((s) => (!lotMoe || s.lot_moe_id === lotMoe) && (!lot || s.lot_id === lot))
       .filter((s) => !q || `${s.code} ${s.nom} ${s.localite}`.toLowerCase().includes(q))
-      .map((s) => ({ site: s, difficultes: difficultesSite(s) }))
+      .map((s) => ({ site: s, difficultes: s.difficultes }))
       .filter((x) => x.difficultes.length > 0);
   }, [sites, lotMoe, lot, recherche]);
 
@@ -203,7 +203,7 @@ export function ListeDifficultes({
   );
 }
 
-function CarteSite({ site: s, difficultes, commentaire }: { site: EtatSite; difficultes: Difficulte[]; commentaire?: DernierCommentaire }) {
+function CarteSite({ site: s, difficultes, commentaire }: { site: SiteDifficultes; difficultes: Difficulte[]; commentaire?: DernierCommentaire }) {
   return (
     <li className="carte p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

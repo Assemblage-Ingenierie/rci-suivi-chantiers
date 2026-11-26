@@ -12,10 +12,9 @@ import {
   pct,
   syntheseLots,
   TERMINES,
-  type EtatSite,
+  type SiteTableau,
   type LotRef,
 } from "@/lib/tableau-de-bord/calculs";
-import { difficultesSite, TYPES_DIFFICULTE } from "@/lib/tableau-de-bord/difficultes";
 import { couleurStatut, ORDRE_STATUTS } from "@/lib/tableau-de-bord/couleurs";
 import { achevementEstime, CourbeEvolution, rythme, type PointEvolution } from "./CourbeEvolution";
 import { LigneBarre, LigneEffectif } from "./Barres";
@@ -89,7 +88,7 @@ export function TableauDeBord({
   evolutionInitiale,
   remplissage,
 }: {
-  sites: EtatSite[];
+  sites: SiteTableau[];
   lots: LotRef[];
   lotsMoe: LotMoeRef[];
   postes: PosteDef[];
@@ -116,11 +115,8 @@ export function TableauDeBord({
   const parSite = useMemo(() => new Map(remplissage.map((l) => [l.site_id, l])), [remplissage]);
   const sitesSuivis = useMemo(() => filtres.filter((s) => suivi(parSite.get(s.id))).map((s) => s.id), [filtres, parSite]);
   const syntheses = useMemo(() => syntheseRemplissage(sitesSuivis, parSite), [sitesSuivis, parSite]);
-  // Sites à suivre : au moins une difficulté sérieuse (gravité ≥ 2 : arrêt, problème MOE, écart, rapport manquant).
-  const aSuivre = useMemo(
-    () => filtres.filter((s) => difficultesSite(s).some((d) => (TYPES_DIFFICULTE.find((t) => t.cle === d.type)?.gravite ?? 0) >= 2)).length,
-    [filtres]
-  );
+  // Sites à suivre : au moins une difficulté sérieuse (calculé côté serveur, voir aSuivre()).
+  const aSuivre = useMemo(() => filtres.filter((s) => s.a_suivre).length, [filtres]);
 
   const n = filtres.length;
   const compte = (cle: string) =>
