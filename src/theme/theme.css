@@ -1,0 +1,108 @@
+/* ============================================================================
+ * CHARTE GRAPHIQUE — fichier unique
+ *
+ * Pour changer la charte : modifier les valeurs ci-dessous (et la marque dans
+ * src/theme/marque.ts). Aucun composant ne contient de couleur en dur : ils
+ * utilisent les noms d'usage (bg-accent, text-texte-2, border-bordure…)
+ * définis dans tailwind.config.ts à partir de ces variables.
+ *
+ * Format : composantes RVB séparées par des espaces (« 91 42 42 »), pour que
+ * Tailwind puisse appliquer une transparence (bg-accent/10).
+ * ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --c-fond: 244 241 236;          /* fond des pages (beige clair) */
+  --c-surface: 255 255 255;       /* cartes, champs */
+  --c-surface-2: 249 247 243;     /* zones secondaires dans une carte */
+
+  /* Textes */
+  --c-texte: 31 31 31;
+  --c-texte-2: 95 94 90;          /* texte secondaire */
+  --c-texte-3: 137 135 129;       /* indications, libellés discrets */
+
+  /* Traits */
+  --c-bordure: 225 221 213;
+  --c-bordure-forte: 196 191 181;
+
+  /* Choix sélectionné (boutons de réponse des formulaires) */
+  --c-selection: 227 238 245;
+  --c-selection-bordure: 31 86 115;
+
+  /* États */
+  --c-succes: 47 110 50;
+  --c-succes-clair: 232 242 226;
+  --c-alerte: 194 65 12;
+  --c-alerte-clair: 254 240 225;
+  --c-danger: 185 28 28;
+  --c-danger-clair: 252 235 235;
+  --c-info: 47 111 159;
+  --c-info-clair: 230 240 248;
+
+  /* Graphiques du tableau de bord */
+  --c-graphe-piste: 232 228 220;  /* fond d'une colonne de la mosaïque */
+  --c-graphe-rempli: 31 86 115;   /* part réalisée */
+  --c-graphe-repere: 91 42 42;    /* ligne de l'avancement global */
+  --c-chaleur-min: 238 244 249;   /* carte de chaleur : 0 % */
+  --c-chaleur-max: 18 63 99;      /* carte de chaleur : 100 % */
+
+  /* Types de formulaire (suivi du remplissage) : couleurs des profils */
+  --c-source-moe: 230 145 20;
+  --c-source-cstc: 26 79 110;
+  --c-source-ug: 140 60 60;
+
+  /* Statuts des chantiers (diagrammes et carte) */
+  --c-statut-sans-rapport: 214 209 200;
+  --c-statut-non-demarre: 150 146 138;
+  --c-statut-en-cours: 47 111 159;
+  --c-statut-arrete: 185 28 28;
+  --c-statut-termine: 112 170 92;
+  --c-statut-receptionne: 39 98 44;
+
+  /* Couleur d'accent : dépend du profil (voir plus bas). Valeur par défaut =
+     écrans publics (connexion, inscription). */
+  --c-accent: 91 42 42;
+  --c-accent-fonce: 66 28 28;
+  --c-accent-clair: 241 230 228;
+  --c-sur-accent: 255 255 255;    /* texte posé sur la couleur d'accent */
+
+  /* Formes */
+  --rayon: 10px;
+  --rayon-petit: 6px;
+}
+
+/* ----------------------------------------------------------------------------
+ * Une couleur d'accent par profil (attribut data-profil sur <body>).
+ * -------------------------------------------------------------------------- */
+
+/* UG — bordeaux */
+[data-profil="ug"] {
+  --c-accent: 91 42 42;
+  --c-accent-fonce: 66 28 28;
+  --c-accent-clair: 241 230 228;
+  --c-sur-accent: 255 255 255;
+}
+
+/* CSTC — bleu */
+[data-profil="cstc"] {
+  --c-accent: 26 79 110;
+  --c-accent-fonce: 16 56 80;
+  --c-accent-clair: 227 238 245;
+  --c-sur-accent: 255 255 255;
+}
+
+/* MOE (contrôleurs et chefs de mission) — orange, texte foncé */
+[data-profil="moe"] {
+  --c-accent: 245 158 28;
+  --c-accent-fonce: 196 117 8;
+  --c-accent-clair: 254 243 224;
+  --c-sur-accent: 31 31 31;
+}
+
+/* Administration — ardoise */
+[data-profil="admin"] {
+  --c-accent: 55 65 81;
+  --c-accent-fonce: 31 41 55;
+  --c-accent-clair: 233 235 239;
+  --c-sur-accent: 255 255 255;
+}

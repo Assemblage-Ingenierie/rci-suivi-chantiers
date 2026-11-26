@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:db": "node supabase/tests/rls.test.mjs && node supabase/tests/formulaires.test.mjs && node supabase/tests/donnees-fictives.test.mjs && node supabase/tests/tableau-de-bord.test.mjs && node supabase/tests/suivi.test.mjs && node supabase/tests/installation.test.mjs",
+    "referentiel": "node scripts/generer-referentiel.mjs",
+    "installation": "node scripts/generer-installation.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -25,6 +28,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20.14.15",
     "@types/react": "^18.3.3",

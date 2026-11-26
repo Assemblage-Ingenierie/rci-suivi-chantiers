@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette avancement PATEB</title>
+<style>
+  :root {
+    --ug: #5b2a2a; --fond: #f4f1ec; --carte: #ffffff; --texte: #1f1f1f; --texte-2: #5f5e5a;
+    --trait: #e1ddd5; --piste: #ece8e1; --rempli: #2f6f9f; --alerte: #c2410c; --objectif: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fond); color: var(--texte); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  header { background: var(--ug); color: #fff; padding: 16px 24px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header p { margin: 2px 0 0; opacity: .8; font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { background: var(--carte); border: 1px solid var(--trait); border-radius: 10px; padding: 12px 14px; }
+  .kpi .l { font-size: 12px; color: var(--texte-2); }
+  .kpi .v { font-size: 26px; font-weight: 600; }
+  .kpi .s { font-size: 12px; color: var(--texte-2); }
+  section { background: var(--carte); border: 1px solid var(--trait); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  section h2 { margin: 0 0 2px; font-size: 15px; }
+  .aide { margin: 0 0 10px; font-size: 12px; color: var(--texte-2); }
+  .src { display: inline-block; font-size: 11px; background: #fff3df; color: #8a4b00; border-radius: 4px; padding: 1px 6px; margin-left: 6px; font-weight: 500; }
+  #tip { min-height: 20px; font-size: 13px; color: var(--texte-2); margin-top: 6px; }
+  .leg { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--texte-2); margin-top: 8px; align-items: center; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  .note { font-size: 12px; color: var(--texte-2); background: var(--fond); border-radius: 8px; padding: 10px 12px; }
+  svg text { font-family: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tableau de bord — avancement des travaux (maquette)</h1>
+  <p>Données d'avancement fictives · nombre de sites par lot réel (allotissement du DAO) · poids des lots = nombre de sites, paramétrable par l'admin</p>
+</header>
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Avancement global pondéré <span class="src">Source : MOE</span></div><div class="v" id="kGlob">–</div><div class="s">Σ poids × avancement / Σ poids</div></div>
+    <div class="kpi"><div class="l">Moyenne simple des lots</div><div class="v" id="kMoy" style="color:var(--texte-2)">–</div><div class="s">pour comparaison, non utilisée</div></div>
+    <div class="kpi"><div class="l">Sites</div><div class="v">387</div><div class="s">33 lots de travaux · 4 lots MOE</div></div>
+    <div class="kpi"><div class="l">Écarts MOE / UG &gt; 5 points</div><div class="v" id="kDisc" style="color:var(--alerte)">–</div><div class="s">lots à examiner</div></div>
+  </div>
+
+  <section>
+    <h2>1. Barre mosaïque des lots <span class="src">Source : MOE</span></h2>
+    <p class="aide">Largeur d'une colonne = poids du lot. Hauteur remplie = avancement du lot. La surface remplie rapportée à la surface totale donne exactement l'avancement global. Un triangle orange signale un écart MOE / UG supérieur à 5 points. Survolez une colonne.</p>
+    <svg id="mosaic" width="100%" viewBox="0 0 1060 190" role="img" aria-label="Barre mosaïque des 33 lots"></svg>
+    <div id="tip">&nbsp;</div>
+    <div class="leg">
+      <span><span class="sw" style="background:var(--rempli)"></span>avancement (MOE)</span>
+      <span><span class="sw" style="background:var(--piste)"></span>reste à faire</span>
+      <span><span class="sw" style="background:var(--objectif)"></span>avancement global</span>
+      <span style="color:var(--alerte)">▼ écart MOE / UG &gt; 5 pts</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Carte de chaleur lot × corps d'état <span class="src">Source : MOE</span></h2>
+    <p class="aide">Chaque case = avancement moyen pondéré du corps d'état sur les sites du lot. Colonnes alignées sur le DQE type (salle de classe) plus une colonne latrines. Les deux dernières colonnes comparent l'avancement du lot selon la MOE et selon l'UG.</p>
+    <svg id="heat" width="100%" viewBox="0 0 1060 640" role="img" aria-label="Carte de chaleur avancement par lot et corps d'état"></svg>
+    <div class="leg">0 %<span style="display:inline-block;width:140px;height:10px;border-radius:2px;background:linear-gradient(90deg,#eef4f9,#123f63)"></span>100 % · <span style="color:var(--alerte)">case UG cerclée = écart &gt; 5 pts</span></div>
+  </section>
+
+  <p class="note">Toutes les couleurs de cette maquette sont définies une seule fois dans <code>:root</code> : c'est le principe retenu pour l'application (demande 11).</p>
+</main>
+<script>
+const lots = [["1","Bounkani 1",7],["2","Bounkani 2",11],["3","Gontougo 1",11],["4","Gontougo 2",16],["5","Hambol 1",12],["6","Hambol 2",13],["7","Hambol 3",12],["8","Hambol 4",15],["9","Tchologo 1",12],["10","Tchologo 2",11],["11","Tchologo 3",8],["12","Tchologo 4",9],["13","Kabadougou et Folon",8],["14","Bagoué 1",10],["15","Bagoué 2",8],["16","Bafing et Béré 1",14],["17","Béré 2",11],["18","Worodougou 1",16],["19","Worodougou 2",16],["20","Indénié-Djuablin 1",8],["21","Indénié-Djuablin 2",10],["22","Indénié-Djuablin 3",14],["23","Indénié-Djuablin 4",11],["24","Indénié-Djuablin 5",14],["25","Nawa 1",11],["26","Nawa 2",13],["27","Nawa 3",11],["28","Nawa 4",13],["29","Cavally 1",12],["30","Cavally 2",14],["31","Cavally 3",11],["32","Cavally 4",11],["33","Gbôklé",14]];
+const ce = [["Terrassements",5],["Gros œuvre",40],["Charpente",6],["Couverture",8],["Serrurerie",6],["Électricité",4],["Menuiserie bois",3],["Faux-plafond",5],["Peinture",7],["Latrines",16]];
+const W = ce.reduce((a, c) => a + c[1], 0);
+let s = 11; const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+const data = lots.map(([n, nom, k]) => {
+  const p = Math.min(0.96, Math.max(0.04, (0.12 + rnd() * 0.78) * (k > 14 ? 0.8 : 1)));
+  let cum = 0; const t = ce.map(([, w]) => { const v = Math.max(0, Math.min(1, (p * W - cum) / w)); cum += w; return v; });
+  const ug = Math.min(1, Math.max(0, p + (rnd() - 0.5) * 0.16));
+  return { n, nom, k, p, t, ug, disc: Math.abs(ug - p) > 0.05 };
+});
+const tot = data.reduce((a, d) => a + d.k, 0);
+const glob = data.reduce((a, d) => a + d.k * d.p, 0) / tot;
+const moy = data.reduce((a, d) => a + d.p, 0) / data.length;
+const pct = v => Math.round(v * 100) + " %";
+document.getElementById("kGlob").textContent = pct(glob);
+document.getElementById("kMoy").textContent = pct(moy);
+document.getElementById("kDisc").textContent = data.filter(d => d.disc).length;
+
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a, parent) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (parent) parent.appendChild(e); return e; };
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+const M = document.getElementById("mosaic"), tip = document.getElementById("tip");
+const H = 140, T = 16, gap = 2, usable = 1060 - gap * (data.length - 1);
+let x = 0;
+data.forEach(d => {
+  const w = usable * d.k / tot, g = el("g", { style: "cursor:pointer" }, M);
+  el("rect", { x, y: T, width: w, height: H, fill: css("--piste") }, g);
+  el("rect", { x, y: T + H * (1 - d.p), width: w, height: H * d.p, fill: css("--rempli") }, g);
+  el("text", { x: x + w / 2, y: T + H + 16, "text-anchor": "middle", "font-size": 11, fill: css("--texte-2") }, g).textContent = d.n;
+  if (d.disc) el("path", { d: `M${x + w / 2 - 5},2 L${x + w / 2 + 5},2 L${x + w / 2},11 Z`, fill: css("--alerte") }, g);
+  g.addEventListener("mouseenter", () => {
+    tip.textContent = `Lot ${d.n} – ${d.nom} · ${d.k} sites (poids ${(100 * d.k / tot).toFixed(1)} %) · MOE ${pct(d.p)} · UG ${pct(d.ug)}` + (d.disc ? " · écart > 5 pts" : "");
+  });
+  x += w + gap;
+});
+const yg = T + H * (1 - glob);
+el("line", { x1: 0, x2: 1060, y1: yg, y2: yg, stroke: css("--objectif"), "stroke-width": 1.5, "stroke-dasharray": "5 4" }, M);
+el("text", { x: 1056, y: yg - 5, "text-anchor": "end", "font-size": 12, "font-weight": 600, fill: css("--objectif") }, M).textContent = "global " + pct(glob);
+
+const Hh = document.getElementById("heat"), lw = 170, haut = 92, rh = 16;
+const cols = [...ce.map(c => c[0]), "Lot (MOE)", "Lot (UG)"];
+const cw = (1060 - lw - 20) / cols.length;
+const col = v => { const a = [238, 244, 249], b = [18, 63, 99]; return "rgb(" + a.map((c, i) => Math.round(c + (b[i] - c) * v)).join(",") + ")"; };
+cols.forEach((c, j) => {
+  const xx = lw + j * cw + cw / 2 + (j >= ce.length ? 12 : 0);
+  el("text", { transform: `translate(${xx},${haut - 8}) rotate(-35)`, "font-size": 11, fill: css("--texte-2") }, Hh).textContent = j < ce.length ? `${c} (${ce[j][1]} %)` : c;
+});
+data.forEach((d, i) => {
+  const y = haut + i * rh;
+  el("text", { x: lw - 8, y: y + rh - 4, "text-anchor": "end", "font-size": 11, fill: css("--texte") }, Hh).textContent = `${d.n}. ${d.nom}`;
+  [...d.t, d.p, d.ug].forEach((v, j) => {
+    const xx = lw + j * cw + (j >= ce.length ? 12 : 0);
+    const r = el("rect", { x: xx, y, width: cw - 2, height: rh - 2, rx: 2, fill: col(v) }, Hh);
+    if (j === ce.length + 1 && d.disc) { r.setAttribute("stroke", css("--alerte")); r.setAttribute("stroke-width", 2); }
+    el("title", {}, r).textContent = `Lot ${d.n} – ${cols[j]} : ${pct(v)}`;
+    if (j >= ce.length) el("text", { x: xx + (cw - 2) / 2, y: y + rh - 4, "text-anchor": "middle", "font-size": 10, fill: v > 0.55 ? "#fff" : css("--texte") }, Hh).textContent = pct(v);
+  });
+});
+Hh.setAttribute("viewBox", `0 0 1060 ${haut + data.length * rh + 8}`);
+</script>
+</body>
+</html>

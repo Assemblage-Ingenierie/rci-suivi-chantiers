@@ -1,6 +1,7 @@
-// Types générés depuis le schéma Supabase (MCP generate_typescript_types).
-// Le projet EXTERNAL est partagé : les tables PEEB (buildings, app_params,
-// profiles) appartiennent à l'autre application — ne pas les utiliser ici.
+// Types du schéma Supabase « refonte PATEB » (migrations supabase/migrations/2026112410*).
+// Écrits à la main au format de `supabase gen types typescript` : le projet
+// Supabase dédié n'est pas accessible à l'outil de génération. À régénérer
+// (Dashboard → API Docs, ou CLI) si le schéma évolue.
 export type Json =
   | string
   | number
@@ -9,445 +10,256 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+type Role = "cstc" | "moe_controleur" | "moe_chef" | "ug" | "admin"
+type StatutCompte = "en_attente" | "actif" | "suspendu"
+type TypeLatrines = "seches" | "a_eau"
+type SourceFormulaire = "cstc" | "moe" | "ug"
+// « ralenti » existe encore dans le type énuméré SQL mais est interdit (contrainte) : retiré ici.
+type StatutChantier = "non_demarre" | "en_cours" | "arrete" | "termine" | "receptionne"
+
+type VisiteRow = {
+  id: string
+  site_id: string
+  source: SourceFormulaire
+  date_visite: string
+  auteur_id: string | null
+  auteur_nom: string
+  statut: StatutChantier
+  postes: Json
+  reponses: Json
+  commentaire: string
+  donnees_test: boolean
+  created_at: string
+  updated_at: string
+  modifie_par: string | null
+}
+
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      app_params: {
-        Row: {
-          currency: string
-          energy_cost: number
-          exchange_rate: number
-          id: number
-          savings_by_typology: Json | null
-          score_config: Json | null
-          unit_costs: Json
-          updated_at: string
-        }
-        Insert: {
-          currency?: string
-          energy_cost?: number
-          exchange_rate?: number
-          id?: number
-          savings_by_typology?: Json | null
-          score_config?: Json | null
-          unit_costs?: Json
-          updated_at?: string
-        }
-        Update: {
-          currency?: string
-          energy_cost?: number
-          exchange_rate?: number
-          id?: number
-          savings_by_typology?: Json | null
-          score_config?: Json | null
-          unit_costs?: Json
-          updated_at?: string
-        }
+      chantierci_lots_moe: {
+        Row: { id: number; nom: string; regions: string[]; titulaire: string }
+        Insert: { id: number; nom: string; regions?: string[]; titulaire?: string }
+        Update: { id?: number; nom?: string; regions?: string[]; titulaire?: string }
         Relationships: []
       }
-      buildings: {
+      chantierci_lots: {
+        Row: { id: number; nom: string; entreprise_titulaire: string; poids: number }
+        Insert: { id: number; nom: string; entreprise_titulaire?: string; poids?: number }
+        Update: { id?: number; nom?: string; entreprise_titulaire?: string; poids?: number }
+        Relationships: []
+      }
+      chantierci_sites: {
         Row: {
-          address: string
-          afd_loan: number
-          area: number | null
-          audit_author: string | null
-          audit_date: string | null
-          audit_file_url: string | null
-          baseline_eui: number | null
-          created_at: string
-          design_progress: string | null
-          ee_capex_override: number | null
-          existing_audit: boolean | null
-          floors: number | null
-          funding_source: string
-          gain_override: number | null
-          governorate: string
           id: string
-          images: string[]
-          is_draft: boolean
-          lat: number | null
-          lng: number | null
-          manually_ineligible: boolean
-          measures: Json
-          name: string
-          national_budget: number
-          operating_hours: string
-          others: number
-          peeb_selected: boolean
-          priority: string | null
+          code: string
+          lot_id: number
+          lot_moe_id: number
+          nom: string
           region: string
-          site_observations: string
-          source: string | null
-          status: string
-          total_baseline_kwh: number | null
-          total_project_kwh: number | null
-          typology: string
-          updated_at: string
-          works_progress: string | null
-          year_built: number | null
-        }
-        Insert: {
-          address?: string
-          afd_loan?: number
-          area?: number | null
-          audit_author?: string | null
-          audit_date?: string | null
-          audit_file_url?: string | null
-          baseline_eui?: number | null
-          created_at?: string
-          design_progress?: string | null
-          ee_capex_override?: number | null
-          existing_audit?: boolean | null
-          floors?: number | null
-          funding_source?: string
-          gain_override?: number | null
-          governorate?: string
-          id: string
-          images?: string[]
-          is_draft?: boolean
-          lat?: number | null
-          lng?: number | null
-          manually_ineligible?: boolean
-          measures?: Json
-          name: string
-          national_budget?: number
-          operating_hours?: string
-          others?: number
-          peeb_selected?: boolean
-          priority?: string | null
-          region?: string
-          site_observations?: string
-          source?: string | null
-          status?: string
-          total_baseline_kwh?: number | null
-          total_project_kwh?: number | null
-          typology: string
-          updated_at?: string
-          works_progress?: string | null
-          year_built?: number | null
-        }
-        Update: {
-          address?: string
-          afd_loan?: number
-          area?: number | null
-          audit_author?: string | null
-          audit_date?: string | null
-          audit_file_url?: string | null
-          baseline_eui?: number | null
-          created_at?: string
-          design_progress?: string | null
-          ee_capex_override?: number | null
-          existing_audit?: boolean | null
-          floors?: number | null
-          funding_source?: string
-          gain_override?: number | null
-          governorate?: string
-          id?: string
-          images?: string[]
-          is_draft?: boolean
-          lat?: number | null
-          lng?: number | null
-          manually_ineligible?: boolean
-          measures?: Json
-          name?: string
-          national_budget?: number
-          operating_hours?: string
-          others?: number
-          peeb_selected?: boolean
-          priority?: string | null
-          region?: string
-          site_observations?: string
-          source?: string | null
-          status?: string
-          total_baseline_kwh?: number | null
-          total_project_kwh?: number | null
-          typology?: string
-          updated_at?: string
-          works_progress?: string | null
-          year_built?: number | null
-        }
-        Relationships: []
-      }
-      chantierci_commentaires: {
-        Row: {
-          auteur_nom: string
-          contenu: string
-          created_at: string
-          etablissement_id: string
-          id: string
-          user_id: string | null
-        }
-        Insert: {
-          auteur_nom?: string
-          contenu: string
-          created_at?: string
-          etablissement_id: string
-          id?: string
-          user_id?: string | null
-        }
-        Update: {
-          auteur_nom?: string
-          contenu?: string
-          created_at?: string
-          etablissement_id?: string
-          id?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chantierci_commentaires_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_etablissements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_commentaires_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_commentaires_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chantierci_etablissements: {
-        Row: {
-          archive: boolean
-          created_at: string
-          departement: string | null
-          email: string | null
-          id: string
+          departement: string
+          localite: string
+          zone: string
+          electricite: boolean
+          type_latrines: TypeLatrines
           latitude: number | null
           longitude: number | null
-          lot_id: string | null
-          nom: string
-          nom_directeur: string | null
-          province: string | null
-          statut: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          telephone: string | null
-          village: string | null
+          a_verifier: string
+          actif: boolean
+          updated_at: string
         }
         Insert: {
-          archive?: boolean
-          created_at?: string
-          departement?: string | null
-          email?: string | null
           id?: string
+          code: string
+          lot_id: number
+          lot_moe_id: number
+          nom: string
+          region: string
+          departement?: string
+          localite?: string
+          zone?: string
+          electricite?: boolean
+          type_latrines: TypeLatrines
           latitude?: number | null
           longitude?: number | null
-          lot_id?: string | null
-          nom: string
-          nom_directeur?: string | null
-          province?: string | null
-          statut?: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          telephone?: string | null
-          village?: string | null
+          a_verifier?: string
+          actif?: boolean
+          updated_at?: string
         }
         Update: {
-          archive?: boolean
-          created_at?: string
-          departement?: string | null
-          email?: string | null
           id?: string
+          code?: string
+          lot_id?: number
+          lot_moe_id?: number
+          nom?: string
+          region?: string
+          departement?: string
+          localite?: string
+          zone?: string
+          electricite?: boolean
+          type_latrines?: TypeLatrines
           latitude?: number | null
           longitude?: number | null
-          lot_id?: string | null
-          nom?: string
-          nom_directeur?: string | null
-          province?: string | null
-          statut?: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          telephone?: string | null
-          village?: string | null
+          a_verifier?: string
+          actif?: boolean
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "chantierci_etablissements_lot_id_fkey"
+            foreignKeyName: "chantierci_sites_lot_id_fkey"
             columns: ["lot_id"]
             isOneToOne: false
             referencedRelation: "chantierci_lots"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      chantierci_lots: {
-        Row: {
-          id: string
-          nom: string
-          region: string
-        }
-        Insert: {
-          id?: string
-          nom: string
-          region: string
-        }
-        Update: {
-          id?: string
-          nom?: string
-          region?: string
-        }
-        Relationships: []
-      }
-      chantierci_marches_travaux: {
-        Row: {
-          date_demarrage: string | null
-          date_fin_estimative: string | null
-          etablissement_id: string
-          id: string
-          montant_marche: number
-          nom_entreprise: string
-          numero_marche: string
-        }
-        Insert: {
-          date_demarrage?: string | null
-          date_fin_estimative?: string | null
-          etablissement_id: string
-          id?: string
-          montant_marche: number
-          nom_entreprise: string
-          numero_marche: string
-        }
-        Update: {
-          date_demarrage?: string | null
-          date_fin_estimative?: string | null
-          etablissement_id?: string
-          id?: string
-          montant_marche?: number
-          nom_entreprise?: string
-          numero_marche?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "chantierci_marches_travaux_etablissement_id_fkey"
-            columns: ["etablissement_id"]
+            foreignKeyName: "chantierci_sites_lot_moe_id_fkey"
+            columns: ["lot_moe_id"]
             isOneToOne: false
-            referencedRelation: "chantierci_etablissements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_marches_travaux_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
+            referencedRelation: "chantierci_lots_moe"
             referencedColumns: ["id"]
           },
         ]
       }
-      chantierci_paiements: {
+      chantierci_profiles: {
         Row: {
+          id: string
+          nom_complet: string
+          email: string
+          identifiant: string | null
+          telephone: string
+          role: Role
+          lot_moe_id: number | null
+          statut_compte: StatutCompte
           created_at: string
-          date_paiement: string
-          id: string
-          libelle: string
-          marche_id: string
-          montant: number
-          saisi_par: string | null
         }
         Insert: {
+          id: string
+          nom_complet?: string
+          email?: string
+          identifiant?: string | null
+          telephone?: string
+          role?: Role
+          lot_moe_id?: number | null
+          statut_compte?: StatutCompte
           created_at?: string
-          date_paiement: string
-          id?: string
-          libelle?: string
-          marche_id: string
-          montant: number
-          saisi_par?: string | null
         }
         Update: {
-          created_at?: string
-          date_paiement?: string
           id?: string
-          libelle?: string
-          marche_id?: string
-          montant?: number
-          saisi_par?: string | null
+          nom_complet?: string
+          email?: string
+          identifiant?: string | null
+          telephone?: string
+          role?: Role
+          lot_moe_id?: number | null
+          statut_compte?: StatutCompte
+          created_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "chantierci_paiements_marche_id_fkey"
-            columns: ["marche_id"]
+            foreignKeyName: "chantierci_profiles_lot_moe_id_fkey"
+            columns: ["lot_moe_id"]
             isOneToOne: false
-            referencedRelation: "chantierci_marches_travaux"
+            referencedRelation: "chantierci_lots_moe"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      chantierci_affectations: {
+        Row: { profile_id: string; site_id: string; created_at: string }
+        Insert: { profile_id: string; site_id: string; created_at?: string }
+        Update: { profile_id?: string; site_id?: string; created_at?: string }
+        Relationships: [
           {
-            foreignKeyName: "chantierci_paiements_marche_id_fkey"
-            columns: ["marche_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["marche_id"]
-          },
-          {
-            foreignKeyName: "chantierci_paiements_marche_id_fkey"
-            columns: ["marche_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_marches_financier"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_paiements_saisi_par_fkey"
-            columns: ["saisi_par"]
+            foreignKeyName: "chantierci_affectations_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "chantierci_profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "chantierci_affectations_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "chantierci_sites"
+            referencedColumns: ["id"]
+          },
         ]
       }
-      chantierci_photos_visites: {
+      chantierci_parametres: {
+        Row: { cle: string; valeur: number; libelle: string }
+        Insert: { cle: string; valeur: number; libelle?: string }
+        Update: { cle?: string; valeur?: number; libelle?: string }
+        Relationships: []
+      }
+      chantierci_postes: {
+        Row: { ouvrage: string; code: string; libelle: string; poids: number; ordre: number }
+        Insert: { ouvrage: string; code: string; libelle: string; poids: number; ordre: number }
+        Update: { ouvrage?: string; code?: string; libelle?: string; poids?: number; ordre?: number }
+        Relationships: []
+      }
+      chantierci_visites: {
+        Row: VisiteRow
+        Insert: {
+          id?: string
+          site_id: string
+          source: SourceFormulaire
+          date_visite?: string
+          auteur_id?: string | null
+          auteur_nom?: string
+          statut: StatutChantier
+          postes?: Json
+          reponses?: Json
+          commentaire?: string
+          donnees_test?: boolean
+          created_at?: string
+          updated_at?: string
+          modifie_par?: string | null
+        }
+        Update: Partial<VisiteRow>
+        Relationships: [
+          {
+            foreignKeyName: "chantierci_visites_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "chantierci_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chantierci_photos: {
         Row: {
-          created_at: string
           id: string
-          storage_path: string
-          sync_status: Database["public"]["Enums"]["chantierci_sync_status"]
-          taille_ko: number | null
-          url_public: string | null
           visite_id: string
+          chemin: string
+          legende: string
+          question: string
+          latitude: number | null
+          longitude: number | null
+          prise_le: string | null
+          created_at: string
         }
         Insert: {
-          created_at?: string
           id?: string
-          storage_path: string
-          sync_status?: Database["public"]["Enums"]["chantierci_sync_status"]
-          taille_ko?: number | null
-          url_public?: string | null
           visite_id: string
+          chemin: string
+          legende?: string
+          question?: string
+          latitude?: number | null
+          longitude?: number | null
+          prise_le?: string | null
+          created_at?: string
         }
         Update: {
-          created_at?: string
-          id?: string
-          storage_path?: string
-          sync_status?: Database["public"]["Enums"]["chantierci_sync_status"]
-          taille_ko?: number | null
-          url_public?: string | null
-          visite_id?: string
+          legende?: string
+          question?: string
         }
         Relationships: [
           {
-            foreignKeyName: "chantierci_photos_visites_visite_id_fkey"
-            columns: ["visite_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_dernieres_visites"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_photos_visites_visite_id_fkey"
-            columns: ["visite_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["derniere_visite_id"]
-          },
-          {
-            foreignKeyName: "chantierci_photos_visites_visite_id_fkey"
+            foreignKeyName: "chantierci_photos_visite_id_fkey"
             columns: ["visite_id"]
             isOneToOne: false
             referencedRelation: "chantierci_visites"
@@ -455,345 +267,126 @@ export type Database = {
           },
         ]
       }
-      chantierci_profiles: {
-        Row: {
-          created_at: string
-          email: string
-          id: string
-          lot_ids: string[]
-          nom_complet: string
-          role: Database["public"]["Enums"]["chantierci_user_role"]
-          statut_compte: Database["public"]["Enums"]["chantierci_statut_compte"]
-          telephone: string
-        }
-        Insert: {
-          created_at?: string
-          email?: string
-          id: string
-          lot_ids?: string[]
-          nom_complet?: string
-          role?: Database["public"]["Enums"]["chantierci_user_role"]
-          statut_compte?: Database["public"]["Enums"]["chantierci_statut_compte"]
-          telephone?: string
-        }
-        Update: {
-          created_at?: string
-          email?: string
-          id?: string
-          lot_ids?: string[]
-          nom_complet?: string
-          role?: Database["public"]["Enums"]["chantierci_user_role"]
-          statut_compte?: Database["public"]["Enums"]["chantierci_statut_compte"]
-          telephone?: string
-        }
+      chantierci_departements: {
+        Row: { nom: string; region: string; latitude: number; longitude: number }
+        Insert: { nom: string; region: string; latitude: number; longitude: number }
+        Update: { latitude?: number; longitude?: number }
         Relationships: []
       }
-      chantierci_visites: {
+      chantierci_commentaires: {
         Row: {
-          archive: boolean
-          avancement_reel_pct: number | null
-          commentaire: string | null
-          created_at: string
-          date_visite: string
-          etablissement_id: string
           id: string
-          nom_visiteur: string
-          pct_charpente: number | null
-          pct_couverture: number | null
-          pct_excavation: number | null
-          pct_finition: number | null
-          pct_fondation: number | null
-          pct_verticaux: number | null
-          raison_arret_autre: string | null
-          raisons_arret: string[] | null
-          statut_chantier: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          sync_status: Database["public"]["Enums"]["chantierci_sync_status"]
-          user_id: string | null
+          site_id: string
+          auteur_id: string | null
+          auteur_nom: string
+          texte: string
+          donnees_test: boolean
+          created_at: string
+          updated_at: string
         }
         Insert: {
-          archive?: boolean
-          avancement_reel_pct?: number | null
-          commentaire?: string | null
-          created_at?: string
-          date_visite: string
-          etablissement_id: string
           id?: string
-          nom_visiteur?: string
-          pct_charpente?: number | null
-          pct_couverture?: number | null
-          pct_excavation?: number | null
-          pct_finition?: number | null
-          pct_fondation?: number | null
-          pct_verticaux?: number | null
-          raison_arret_autre?: string | null
-          raisons_arret?: string[] | null
-          statut_chantier: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          sync_status?: Database["public"]["Enums"]["chantierci_sync_status"]
-          user_id?: string | null
+          site_id: string
+          texte: string
         }
         Update: {
-          archive?: boolean
-          avancement_reel_pct?: number | null
-          commentaire?: string | null
-          created_at?: string
-          date_visite?: string
-          etablissement_id?: string
-          id?: string
-          nom_visiteur?: string
-          pct_charpente?: number | null
-          pct_couverture?: number | null
-          pct_excavation?: number | null
-          pct_finition?: number | null
-          pct_fondation?: number | null
-          pct_verticaux?: number | null
-          raison_arret_autre?: string | null
-          raisons_arret?: string[] | null
-          statut_chantier?: Database["public"]["Enums"]["chantierci_statut_chantier"]
-          sync_status?: Database["public"]["Enums"]["chantierci_sync_status"]
-          user_id?: string | null
+          texte?: string
         }
         Relationships: [
           {
-            foreignKeyName: "chantierci_visites_etablissement_id_fkey"
-            columns: ["etablissement_id"]
+            foreignKeyName: "chantierci_commentaires_site_id_fkey"
+            columns: ["site_id"]
             isOneToOne: false
-            referencedRelation: "chantierci_etablissements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_visites_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_visites_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_profiles"
+            referencedRelation: "chantierci_sites"
             referencedColumns: ["id"]
           },
         ]
-      }
-      profiles: {
-        Row: {
-          created_at: string
-          email: string | null
-          first_name: string | null
-          id: string
-          is_approved: boolean
-          job_title: string | null
-          last_name: string | null
-          requested_status: string | null
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          email?: string | null
-          first_name?: string | null
-          id: string
-          is_approved?: boolean
-          job_title?: string | null
-          last_name?: string | null
-          requested_status?: string | null
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          email?: string | null
-          first_name?: string | null
-          id?: string
-          is_approved?: boolean
-          job_title?: string | null
-          last_name?: string | null
-          requested_status?: string | null
-          status?: string
-        }
-        Relationships: []
       }
     }
     Views: {
-      chantierci_v_dernieres_visites: {
+      chantierci_v_etat_sites: {
         Row: {
-          avancement_reel_pct: number | null
-          commentaire: string | null
-          created_at: string | null
-          date_visite: string | null
-          etablissement_id: string | null
-          id: string | null
-          nom_visiteur: string | null
-          pct_charpente: number | null
-          pct_couverture: number | null
-          pct_excavation: number | null
-          pct_finition: number | null
-          pct_fondation: number | null
-          pct_verticaux: number | null
-          raison_arret_autre: string | null
-          raisons_arret: string[] | null
-          statut_chantier:
-            | Database["public"]["Enums"]["chantierci_statut_chantier"]
-            | null
-          sync_status:
-            | Database["public"]["Enums"]["chantierci_sync_status"]
-            | null
-          user_id: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chantierci_visites_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_etablissements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_visites_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_visites_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chantierci_v_etablissements_suivi: {
-        Row: {
-          archive: boolean | null
-          avancement_financier_pct: number | null
-          created_at: string | null
-          date_demarrage: string | null
-          date_fin_estimative: string | null
-          departement: string | null
-          dernier_avancement_reel_pct: number | null
-          dernier_statut_chantier:
-            | Database["public"]["Enums"]["chantierci_statut_chantier"]
-            | null
-          derniere_visite_date: string | null
-          derniere_visite_id: string | null
-          derniere_visite_visiteur: string | null
-          email: string | null
-          id: string | null
+          id: string
+          code: string
+          nom: string
+          lot_id: number
+          lot_moe_id: number
+          region: string
+          departement: string
+          localite: string
+          electricite: boolean
+          type_latrines: TypeLatrines
           latitude: number | null
           longitude: number | null
-          lot_id: string | null
-          lot_nom: string | null
-          lot_region: string | null
-          marche_id: string | null
-          montant_marche: number | null
-          montant_paye: number | null
-          nb_visites: number | null
-          nom: string | null
-          nom_directeur: string | null
-          nom_entreprise: string | null
-          numero_marche: string | null
-          province: string | null
-          reste_a_payer: number | null
-          statut:
-            | Database["public"]["Enums"]["chantierci_statut_chantier"]
-            | null
-          telephone: string | null
-          village: string | null
+          origine_position: "site" | "photos" | "departement" | null
+          moe_date: string | null
+          moe_statut: StatutChantier | null
+          moe_postes: Json | null
+          moe_avancement: number | null
+          moe_nb: number
+          ug_date: string | null
+          ug_statut: StatutChantier | null
+          ug_avancement: number | null
+          ug_date_moe_comparee: string | null
+          ug_avancement_moe_compare: number | null
+          ecart_ug_moe: number | null
+          discordance: boolean
+          cstc_date: string | null
+          cstc_statut: StatutChantier | null
+          moe_reponses: Json | null
+          moe_commentaire: string | null
+          moe_arrete_depuis: string | null
+          ug_reponses: Json | null
+          ug_commentaire: string | null
+          cstc_reponses: Json | null
+          cstc_commentaire: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "chantierci_etablissements_lot_id_fkey"
-            columns: ["lot_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_lots"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      chantierci_v_marches_financier: {
-        Row: {
-          avancement_financier_pct: number | null
-          date_demarrage: string | null
-          date_fin_estimative: string | null
-          departement: string | null
-          etablissement_archive: boolean | null
-          etablissement_id: string | null
-          etablissement_nom: string | null
-          id: string | null
-          lot_id: string | null
-          montant_marche: number | null
-          montant_paye: number | null
-          nb_paiements: number | null
-          nom_entreprise: string | null
-          numero_marche: string | null
-          province: string | null
-          reste_a_payer: number | null
-          statut_etablissement:
-            | Database["public"]["Enums"]["chantierci_statut_chantier"]
-            | null
+      chantierci_v_visites: {
+        Row: VisiteRow & {
+          site_code: string
+          site_nom: string
+          lot_id: number
+          lot_moe_id: number
+          avancement: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "chantierci_etablissements_lot_id_fkey"
-            columns: ["lot_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_lots"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_marches_travaux_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_etablissements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chantierci_marches_travaux_etablissement_id_fkey"
-            columns: ["etablissement_id"]
-            isOneToOne: false
-            referencedRelation: "chantierci_v_etablissements_suivi"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Functions: {
-      peeb_can_edit: { Args: never; Returns: boolean }
-      peeb_email_row: {
-        Args: { p_label: string; p_value: string }
-        Returns: string
+      chantierci_evolution_avancement: {
+        Args: { p_lot_moe?: number | null }
+        Returns: { date_ref: string; avancement: number | null }[]
       }
-      peeb_email_shell: {
-        Args: { p_body: string; p_title: string }
-        Returns: string
-      }
-      peeb_html_escape: { Args: { t: string }; Returns: string }
-      peeb_is_admin: { Args: never; Returns: boolean }
-      peeb_is_approved: { Args: never; Returns: boolean }
-      peeb_notify_admins: {
-        Args: { p_html: string; p_subject: string }
-        Returns: undefined
+      chantierci_remplissage: {
+        Args: { p_semaines?: number }
+        Returns: {
+          site_id: string
+          date_ref: string
+          moe: number[]
+          cstc: number[]
+          ug: number[]
+          moe_dernier: string | null
+          cstc_dernier: string | null
+          ug_dernier: string | null
+          moe_statuts: (string | null)[]
+          cstc_statuts: (string | null)[]
+          ug_statuts: (string | null)[]
+          moe_dernier_statut: string | null
+          cstc_dernier_statut: string | null
+          ug_dernier_statut: string | null
+        }[]
       }
     }
     Enums: {
-      chantierci_statut_chantier:
-        | "non_demarre"
-        | "en_cours"
-        | "arrete"
-        | "receptionne"
-      chantierci_statut_compte: "en_attente" | "actif" | "suspendu"
-      chantierci_sync_status: "synced" | "pending_sync"
-      chantierci_user_role:
-        | "coges"
-        | "regional"
-        | "national"
-        | "admin"
-        | "men_viewer"
+      chantierci_role: Role
+      chantierci_statut_compte: StatutCompte
+      chantierci_type_latrines: TypeLatrines
+      chantierci_source_formulaire: SourceFormulaire
+      chantierci_statut_chantier: StatutChantier
     }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+    CompositeTypes: { [_ in never]: never }
   }
 }
 
@@ -917,21 +510,11 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      chantierci_statut_chantier: [
-        "non_demarre",
-        "en_cours",
-        "arrete",
-        "receptionne",
-      ],
+      chantierci_role: ["cstc", "moe_controleur", "moe_chef", "ug", "admin"],
       chantierci_statut_compte: ["en_attente", "actif", "suspendu"],
-      chantierci_sync_status: ["synced", "pending_sync"],
-      chantierci_user_role: [
-        "coges",
-        "regional",
-        "national",
-        "admin",
-        "men_viewer",
-      ],
+      chantierci_type_latrines: ["seches", "a_eau"],
+      chantierci_source_formulaire: ["cstc", "moe", "ug"],
+      chantierci_statut_chantier: ["non_demarre", "en_cours", "arrete", "termine", "receptionne"],
     },
   },
 } as const
