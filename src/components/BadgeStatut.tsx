@@ -1,21 +1,10 @@
-import {
-  COULEURS_STATUTS_CHANTIER,
-  LIBELLES_STATUTS_CHANTIER,
-  type StatutChantier,
-} from "@/lib/constants";
+import { LIBELLES_STATUTS, TEINTE_STATUT } from "@/lib/formulaires/statuts";
+import type { StatutChantier } from "@/lib/formulaires/types";
 
-export function BadgeStatut({
-  statut,
-}: {
-  statut: StatutChantier | null | undefined;
-}) {
-  if (!statut) return <span className="text-sm text-gray-400">—</span>;
+export function BadgeStatut({ statut }: { statut: StatutChantier }) {
   return (
-    <span
-      className="inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold text-white"
-      style={{ backgroundColor: COULEURS_STATUTS_CHANTIER[statut] }}
-    >
-      {LIBELLES_STATUTS_CHANTIER[statut]}
+    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${TEINTE_STATUT[statut]}`}>
+      {LIBELLES_STATUTS[statut]}
     </span>
   );
 }

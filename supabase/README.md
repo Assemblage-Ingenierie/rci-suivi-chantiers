@@ -1,55 +1,121 @@
-# Base de données — Suivi de chantiers scolaires (MEN Côte d'Ivoire)
+# Base de données — refonte PATEB
 
-## Hébergement : projet Supabase partagé
+Projet Supabase dédié (`cvdeckwvhowasdefzqlr`). Les objets restent préfixés
+`chantierci_` ; les fonctions d'aide RLS vivent dans le schéma privé
+`chantierci_private` (non exposé par l'API).
 
-Le schéma est déployé sur le projet Supabase **EXTERNAL** (`grnkbnldfzdzrgleorra`, eu-west-3), **partagé avec l'application PEEB Jordan**. Conséquences :
+L'ancien schéma (suivi MEN, v1) est archivé dans [`archive-v1/`](archive-v1/)
+pour mémoire : il n'est plus utilisé.
 
-- **Tous les objets sont préfixés `chantierci_`** (tables, vues, enums, index, politiques) et les fonctions vivent dans le schéma dédié `chantierci_private` (non exposé par PostgREST). Même convention que les apps du projet INTERNAL.
-- Le bucket Storage s'appelle `chantierci-photos-visites`.
-- **`auth.users` est partagé** entre les deux applications :
-  - Pas de trigger chantierci sur `auth.users` (un trigger s'exécuterait à chaque inscription PEEB et une erreur bloquerait leurs inscriptions). Le profil est créé **par l'application** juste après `signUp()`, encadré par la politique RLS `chantierci_profiles_insert` (statut `en_attente` et `lot_ids = '{}'` imposés).
-  - ⚠️ Réciproquement, le trigger PEEB `on_auth_user_created` crée un profil PEEB `is_approved = true` (viewer) pour **tout** nouvel inscrit, y compris nos utilisateurs COGES. À arbitrer côté PEEB si c'est un problème.
+## Contenu
 
-## Migrations (appliquées le 12/06/2026, historique `supabase_migrations`)
+| Fichier | Rôle |
+|---|---|
+| `migrations/20261124100000_purge_v1.sql` | Supprime le schéma v1 (données factices) et ses comptes de test |
+| `migrations/20261124100100_referentiel.sql` | Tables : lots MOE, lots de travaux, sites, profils, affectations |
+| `migrations/20261124100200_fonctions.sql` | Fonctions d'aide RLS, triggers de protection et de cohérence |
+| `migrations/20261124100300_politiques_rls.sql` | Droits par profil |
+| `migrations/20261124100400_donnees_referentiel.sql` | 4 lots MOE, 33 lots, 387 sites (**fichier généré**) |
+| `migrations/20261125100000_formulaires.sql` | Formulaires CSTC / MOE / UG, postes et poids, photos, calcul de l'avancement |
+| `migrations/20261126100000_tableau_de_bord.sql` | Tableau de bord : chefs-lieux des départements, commentaires, vue `chantierci_v_etat_sites` |
+| `migrations/20261127100000_tableau_de_bord_v2.sql` | Statut « ralenti » retiré, détail des difficultés, évolution hebdomadaire de l'avancement |
+| `migrations/20261128100000_suivi_remplissage.sql` | Suivi du remplissage des formulaires par site et par semaine |
+| `migrations/20261129100000_suivi_attendu.sql` | Suivi : formulaire attendu seulement si l'acteur a déclaré le chantier « en cours » |
+| `seed/comptes_test.sql` | 6 comptes de test (développement uniquement) |
+| `seed/donnees_fictives.sql` | Visites et commentaires fictifs sur les 387 sites (test uniquement, rejouable) |
+| `installation.sql` | **Script unique pour une base vierge** (généré : réinitialisation + toutes les migrations) |
+| `tests/` | Tests du schéma, des droits et de l'installation sur un Postgres local |
 
-| Fichier local | Migration distante | Contenu |
+## Installation sur le projet Supabase
+
+> ⚠️ N'exécuter **que** `supabase/installation.sql` (puis le seed). Les fichiers
+> de `archive-v1/` sont l'ancienne version : les rejouer provoque des erreurs
+> du type `policy "chantierci_paiements_update_national_admin" ... already exists`.
+
+1. Supabase → **SQL Editor** → *New query* → coller **tout** le contenu de
+   [`installation.sql`](installation.sql) → **Run**.
+   Il efface les données de l'application (v1 factices) puis installe le
+   schéma, les droits et les 387 sites, dans une transaction : en cas
+   d'erreur, rien n'est modifié. Il est rejouable.
+2. *(environnement de test)* nouvelle requête → coller
+   [`seed/comptes_test.sql`](seed/comptes_test.sql) → **Run**.
+3. Contrôle :
+   ```sql
+   select (select count(*) from public.chantierci_sites)    as sites,    -- 387
+          (select count(*) from public.chantierci_lots)     as lots,     -- 33
+          (select count(*) from public.chantierci_profiles) as comptes;  -- 6 avec le seed
+   ```
+
+### Mise à jour d'une base déjà installée
+
+`installation.sql` **efface tout**, y compris les comptes créés à la main
+(admin compris). Sur une base déjà installée, exécuter seulement les
+nouvelles migrations, dans l'ordre, chacune dans une nouvelle requête :
+`20261125100000_formulaires.sql`, `20261126100000_tableau_de_bord.sql`,
+`20261127100000_tableau_de_bord_v2.sql`, `20261128100000_suivi_remplissage.sql`
+puis `20261129100000_suivi_attendu.sql`.
+Elles sont rejouables. Ensuite, en test, `seed/donnees_fictives.sql`.
+
+`installation.sql` est généré à partir de `migrations/` par
+`npm run installation` : ne pas le modifier à la main.
+
+Réglage à vérifier dans **Authentication → Providers → Email** : longueur
+minimale des mots de passe = **6** (le code PIN des CSTC fait 6 chiffres).
+
+## Comptes de test
+
+| Connexion | Mot de passe / PIN | Profil |
 |---|---|---|
-| `20260612100000_schema_initial.sql` | `chantierci_schema_initial` | Enums, 8 tables, contraintes, index |
-| `20260612100100_fonctions_et_triggers.sql` | `chantierci_fonctions_et_triggers` | Schéma `chantierci_private`, fonctions d'aide RLS, trigger de protection des colonnes sensibles |
-| `20260612100200_politiques_rls.sql` | `chantierci_politiques_rls` (+ `chantierci_fusion_politique_insert_profiles`) | RLS activée + politiques par rôle sur toutes les tables |
-| `20260612100300_vues.sql` | `chantierci_vues` | Vues financières et de synthèse (`security_invoker = true`) |
-| `20260612100400_storage.sql` | `chantierci_storage` | Bucket privé `chantierci-photos-visites` + politiques Storage |
+| `admin@pateb.test` | `Pateb!2026` | Admin |
+| `ug@pateb.test` | `Pateb!2026` | UG |
+| `chef.moe2@pateb.test` | `Pateb!2026` | Chef de mission, lot MOE 2 (102 sites) |
+| `controleur.moe2@pateb.test` | `Pateb!2026` | Contrôleur, sites du lot 19 (16 sites) |
+| identifiant `cstc-l19-01` | PIN `123456` | CSTC de L19-01 EPP MAYAMA 1 |
+| `attente@pateb.test` | `Pateb!2026` | Compte en attente (aucun accès) |
 
-Les fichiers locaux sont la référence versionnée ; ils ont été appliqués via le MCP Supabase (`apply_migration`). Pour un nouveau déploiement : exécuter les fichiers dans l'ordre (SQL Editor ou `supabase db push`).
+## Profils et droits
 
-## Décisions de conception
+| Profil | Sites visibles | Écriture (étape 1) |
+|---|---|---|
+| CSTC | son site (1 affectation au plus) | son nom / téléphone |
+| MOE contrôleur | ses affectations | son nom / téléphone |
+| MOE chef de mission | tous les sites de son lot MOE | son nom / téléphone |
+| UG | tous | son nom / téléphone |
+| Admin | tous | tout |
 
-### Sécurité / RLS
-- **Le rôle effectif vient de `chantierci_profiles.role`**, jamais de `user_metadata` (modifiable par l'utilisateur, donc inutilisable pour l'autorisation). Le `role_souhaite` saisi à l'inscription n'est qu'indicatif : le compte naît `en_attente` et l'admin fixe le rôle réel à la validation.
-- **Compte `en_attente` / `suspendu` = zéro accès** : `chantierci_private.user_role()` retourne `NULL` si le compte n'est pas `actif`, ce qui fait échouer toutes les politiques. Seule exception : l'utilisateur lit/édite son propre profil (écran « compte en attente »).
-- Fonctions d'aide **SECURITY DEFINER dans `chantierci_private`** (non exposé) : pas de récursion RLS sur profiles, pas de fonction privilégiée accessible par l'API. `search_path = ''` partout.
-- `role`, `statut_compte` et `lot_ids` sont **verrouillés par trigger** (`chantierci_protect_profile_columns`) : seuls un admin ou un contexte serveur (service_role) peuvent les modifier.
-- Vues en **`security_invoker = true`** : la RLS des tables sous-jacentes s'applique.
-- Toutes les politiques sont `to authenticated` : `anon` n'a accès à rien.
+- Le rôle vient toujours de `chantierci_profiles.role`, jamais des métadonnées
+  utilisateur. Un compte `en_attente` ou `suspendu` ne voit rien d'autre que
+  son profil.
+- `role`, `statut_compte`, `lot_moe_id` et `identifiant` ne sont modifiables
+  que par un admin (trigger).
+- Un CSTC n'est rattaché qu'à un seul site ; seuls les CSTC et les
+  contrôleurs MOE ont des affectations (trigger).
+- Connexion CSTC : email technique `<identifiant>@cstc.pateb.invalid` + PIN
+  (voir `src/lib/identifiants.ts`).
 
-### Périmètres par rôle (matrice CDC §4)
-- **COGES** : établissements dont `lot_id ∈ profiles.lot_ids`. Saisie visites + photos sur ce périmètre. Modification/suppression de ses propres visites.
-- **Régional** : ses `lot_ids` déterminent ses **régions** ; il voit tous les lots de ces régions (lecture + commentaires).
-- **National (MEN)** : lecture globale + saisie des paiements (`saisi_par = auth.uid()` imposé).
-- **Admin** : tout, y compris gestion des profils, lots, établissements et marchés.
+## Modifier la liste des sites
 
-### Modèle
-- Table **`chantierci_commentaires`** ajoutée : absente du modèle du CDC (§3) mais requise par la fonctionnalité régionale (§5.4). Visible MEN + admin + auteur + régionaux de la région.
-- Montants en `numeric` (XOF) — évite les erreurs de flottants.
-- Photos : bucket **privé**, chemin `{visite_id}/{nom_fichier}`, URLs signées côté client. Limite 5 Mo/fichier, MIME image uniquement (compression client cible < 500 Ko).
-- `sync_status` sur visites et photos : suivi de la file de synchronisation offline (IndexedDB → Supabase).
+La source est [`docs/refonte/sites_reference.csv`](../docs/refonte/sites_reference.csv).
+Après modification :
 
-### Vues
-- `chantierci_v_marches_financier` : marché + `montant_paye`, `avancement_financier_pct`, `reste_a_payer` → vue « Marchés de travaux ».
-- `chantierci_v_dernieres_visites` : dernière visite par établissement → groupement par défaut du tableau de suivi.
-- `chantierci_v_etablissements_suivi` : une ligne par établissement (lot, marché le plus récent, financier, dernière visite) → dashboard, carte Leaflet, tableau de suivi. **Toujours paginer côté serveur** (`.range()`).
+```bash
+npm run referentiel    # régénère migrations/20261124100400_donnees_referentiel.sql
+npm run installation   # régénère installation.sql
+npm run test:db        # vérifie schéma, droits et installation
+```
 
-## Vérifications effectuées (12/06/2026)
+La migration de données est rejouable : elle met à jour les sites par code
+sans rien supprimer (les affectations et les poids modifiés par l'admin sont
+conservés). À terme, l'admin modifiera les sites directement dans
+l'application (étape 3).
 
-- Test RLS transactionnel (jeu d'essai annulé par rollback) : périmètres COGES / régional / national corrects, compte `en_attente` sans accès, refus d'auto-promotion admin, refus de saisie paiement par COGES, refus de visite hors lot, avancement financier calculé = 30 % attendu.
-- Advisors Supabase : **aucun finding sécurité ni performance sur les objets `chantierci_*`** (les warnings restants concernent l'app PEEB préexistante : fonctions `peeb_*` sans `search_path`, `pg_net` dans public, protection mots de passe compromis désactivée).
+## Tests
+
+`npm run test:db` travaille sur PGlite (Postgres compilé en WebAssembly, en
+mémoire) avec une imitation des schémas Supabase (`auth`, `storage`). Aucune
+base distante n'est touchée.
+
+- `rls.test.mjs` : 36 règles (périmètre de chaque profil, écritures
+  interdites, affectations, inscription, rejeu de l'import) ;
+- `installation.test.mjs` : part d'une base contenant le schéma et les
+  données v1, applique `installation.sql` deux fois, puis le seed.

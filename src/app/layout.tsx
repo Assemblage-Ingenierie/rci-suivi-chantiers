@@ -1,21 +1,25 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Source_Sans_3 } from "next/font/google";
+import { MARQUE } from "@/theme/marque";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+// Police auto-hébergée par Next.js au build : aucun appel réseau à l'exécution.
+const police = Source_Sans_3({ subsets: ["latin"], variable: "--police", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Suivi chantiers scolaires — MEN Côte d'Ivoire",
-  description:
-    "Application de suivi des chantiers de construction scolaire du Ministère de l'Éducation Nationale de Côte d'Ivoire — AMO Assemblage Ingénierie",
+  title: MARQUE.titreNavigateur,
+  description: MARQUE.description,
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
-      <body className={inter.className}>{children}</body>
+    <html lang="fr" className={police.variable}>
+      <body>{children}</body>
     </html>
   );
 }

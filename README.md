@@ -1,46 +1,57 @@
-# Suivi de chantiers scolaires — MEN Côte d'Ivoire
+# PATEB — Suivi des chantiers
 
-Application web de suivi des chantiers de construction scolaire du **Ministère
-de l'Éducation Nationale de Côte d'Ivoire**. AMO : **Assemblage Ingénierie**.
+Application web de suivi des travaux de construction des **salles de classe du
+pré-primaire** (PATEB, Côte d'Ivoire) : 387 sites, 33 lots de travaux, 4 lots
+de maîtrise d'œuvre.
+
+> **Refonte en cours** — voir le [cahier de la refonte](docs/refonte/cahier-refonte.md).
+> Étape 1 (socle) faite : base, profils et droits, liste des sites, thème
+> unique, connexion identifiant + PIN. Étapes suivantes : formulaires hors
+> ligne (2), administration (3), tableau de bord (4), exports (5).
 
 ## Stack
 
 - **Next.js 14** (App Router, TypeScript) · **Tailwind CSS** · **Lucide**
 - **Supabase** (PostgreSQL + Auth + Storage + RLS)
-- **Leaflet** + OpenStreetMap (carte interactive)
-- **Service Worker (Workbox) + IndexedDB (idb)** — mode hors ligne
-- Exports **jsPDF / SheetJS / docx / JSZip**
 - Hébergement **Vercel**
 
-## Fonctionnalités
+## Profils
 
-- Authentification par email avec **validation des comptes par un admin**
-  (4 rôles : COGES, régional, national/MEN, admin), permissions appliquées
-  par **RLS Supabase**.
-- **Interface COGES** mobile-first **100 % hors ligne** : liste, fiche, saisie
-  de visite avec photos compressées, file de synchronisation.
-- **Dashboard MEN** : KPI, carte Leaflet (2 modes de couleur), tableau de
-  suivi (colonnes configurables, filtres, recherche, pagination serveur).
-- **Marchés de travaux** : suivi financier, saisie des paiements.
-- **Interface régionale** restreinte à la région + commentaires.
-- **Exports** PDF / Word / Excel (fiches de visite avec photos, tableaux).
-- **Administration** : validation des comptes, attribution des lots, gestion
-  des lots, import CSV des établissements, modification des fiches.
+| Profil | Connexion | Accès |
+|---|---|---|
+| CSTC | identifiant + code PIN | formulaire et historique de son site |
+| MOE — contrôleur | email | formulaires de ses sites |
+| MOE — chef de mission | email | formulaires de tous les sites de son lot MOE |
+| UG | email | tous les formulaires (lecture) + formulaire UG + tableau de bord |
+| Admin | email | tout |
+
+Les droits sont appliqués par la base (RLS) : voir [`supabase/README.md`](supabase/README.md).
+
+## Charte graphique
+
+Un seul design, une couleur d'accent par profil. Tout se règle à deux endroits :
+
+- [`src/theme/theme.css`](src/theme/theme.css) — couleurs (y compris celle de chaque profil) et arrondis ;
+- [`src/theme/marque.ts`](src/theme/marque.ts) — nom, sous-titre, logo.
+
+Les composants n'utilisent que des noms d'usage (`bg-accent`, `text-texte-2`,
+`border-bordure`…), jamais de couleur en dur. Police : Source Sans 3.
 
 ## Développement
 
 ```bash
 npm install
-cp .env.example .env.local   # puis renseigner l'URL + la clé publishable Supabase
+cp .env.example .env.local   # URL + clé publishable d'un projet Supabase de TEST
 npm run dev
 ```
 
-## Base de données
+⚠️ Sans `.env.local`, rien n'est configuré en local ; ne pas pointer le
+développement sur la base de production.
 
-Schéma, politiques RLS, vues et seed dans [`supabase/`](supabase/). Tous les
-objets sont préfixés `chantierci_`. Voir [`supabase/README.md`](supabase/README.md)
-et, pour (ré)installer sur un projet,
-[`supabase/nouveau-projet/`](supabase/nouveau-projet/README.md).
+| Commande | Rôle |
+|---|---|
+| `npm run test:db` | Teste le schéma et les droits sur un Postgres local (PGlite) |
+| `npm run referentiel` | Régénère l'import des sites depuis `docs/refonte/sites_reference.csv` |
 
 ## Variables d'environnement
 
@@ -49,10 +60,5 @@ et, pour (ré)installer sur un projet,
 | `NEXT_PUBLIC_SUPABASE_URL` | URL du projet Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clé *publishable* (`sb_publishable_…`, publique) |
 
-> Valeurs publiques par conception (inlinées dans le bundle navigateur) ; la
-> sécurité des données repose sur les politiques RLS. Ne jamais committer la
-> clé `service_role`.
-
----
-
-*Cahier des charges : [`CdC_ChantierCI.md`](CdC_ChantierCI.md).*
+> Valeurs publiques par conception ; la sécurité des données repose sur les
+> politiques RLS. Ne jamais committer la clé `service_role`.

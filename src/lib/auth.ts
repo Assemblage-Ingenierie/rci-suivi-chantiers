@@ -1,18 +1,13 @@
+import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/lib/database.types";
 import type { RoleUtilisateur } from "@/lib/constants";
+import { ROLES_DEMANDABLES } from "@/lib/auth-roles";
 
 export type Profil = Tables<"chantierci_profiles">;
 
-/** Rôles qu'un utilisateur peut demander à l'inscription (jamais admin). */
-export const ROLES_DEMANDABLES: RoleUtilisateur[] = [
-  "coges",
-  "regional",
-  "national",
-];
-
-/** Utilisateur connecté + son profil chantierci (null si absent). */
+/** Utilisateur connecté + son profil (null si absent). */
 export async function getUtilisateurEtProfil(): Promise<{
   user: User | null;
   profil: Profil | null;
@@ -33,21 +28,18 @@ export async function getUtilisateurEtProfil(): Promise<{
 }
 
 /**
- * Crée le profil à la première session authentifiée s'il n'existe pas encore,
- * à partir des métadonnées saisies à l'inscription. Remplace le trigger sur
- * auth.users, impossible sur le projet Supabase partagé (cohabitation PEEB).
- * La politique RLS "chantierci_profiles_insert" force statut_compte =
- * 'en_attente' et lot_ids = '{}' : aucun privilège auto-attribuable.
+ * Crée le profil à la première connexion d'un compte inscrit par email, à
+ * partir des métadonnées saisies à l'inscription. La politique RLS impose
+ * statut `en_attente`, aucun lot ni identifiant : l'admin valide ensuite.
+ * (Les comptes CSTC sont créés par l'admin avec leur profil.)
  */
 export async function creerProfilSiAbsent(user: User): Promise<Profil | null> {
   const supabase = createClient();
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
 
-  const roleSouhaite = ROLES_DEMANDABLES.includes(
-    meta.role_souhaite as RoleUtilisateur
-  )
+  const roleSouhaite = ROLES_DEMANDABLES.includes(meta.role_souhaite as RoleUtilisateur)
     ? (meta.role_souhaite as RoleUtilisateur)
-    : "coges";
+    : "moe_controleur";
 
   const { data: profil } = await supabase
     .from("chantierci_profiles")
@@ -58,7 +50,6 @@ export async function creerProfilSiAbsent(user: User): Promise<Profil | null> {
       telephone: typeof meta.telephone === "string" ? meta.telephone : "",
       role: roleSouhaite,
       statut_compte: "en_attente",
-      lot_ids: [],
     })
     .select()
     .maybeSingle();
@@ -66,7 +57,28 @@ export async function creerProfilSiAbsent(user: User): Promise<Profil | null> {
   return profil;
 }
 
-/** Route d'accueil selon le rôle (compte actif). */
+/** Page d'accueil selon le rôle (compte actif). */
 export function routeParRole(role: RoleUtilisateur): string {
-  return role === "coges" ? "/coges" : "/tableau-de-bord";
+  switch (role) {
+    case "cstc":
+      return "/cstc";
+    case "moe_controleur":
+    case "moe_chef":
+      return "/moe";
+    default:
+      return "/tableau-de-bord";
+  }
+}
+
+/**
+ * Garde de page serveur : renvoie le profil actif si son rôle est autorisé,
+ * sinon redirige vers sa page d'accueil. (Le layout protégé a déjà vérifié la
+ * session et l'activation du compte ; la RLS reste la vraie barrière.)
+ */
+export async function exigerRole(roles: RoleUtilisateur[]): Promise<Profil> {
+  const { user, profil } = await getUtilisateurEtProfil();
+  if (!user) redirect("/connexion");
+  if (!profil || profil.statut_compte !== "actif") redirect("/en-attente");
+  if (!roles.includes(profil.role)) redirect(routeParRole(profil.role));
+  return profil;
 }

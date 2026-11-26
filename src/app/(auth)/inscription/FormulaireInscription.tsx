@@ -4,9 +4,8 @@ import { useState } from "react";
 import { Loader2, MailCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { LIBELLES_ROLES, type RoleUtilisateur } from "@/lib/constants";
+import { ROLES_DEMANDABLES } from "@/lib/auth-roles";
 
-/** Rôles proposés à l'inscription (le rôle admin est attribué manuellement). */
-const ROLES_PROPOSES: RoleUtilisateur[] = ["coges", "regional", "national"];
 
 function messageErreurFr(message: string): string {
   if (message.includes("already registered"))
@@ -21,7 +20,7 @@ export function FormulaireInscription() {
   const [telephone, setTelephone] = useState("");
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
-  const [roleSouhaite, setRoleSouhaite] = useState<RoleUtilisateur>("coges");
+  const [roleSouhaite, setRoleSouhaite] = useState<RoleUtilisateur>("moe_controleur");
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [emailAConfirmer, setEmailAConfirmer] = useState(false);
@@ -67,9 +66,9 @@ export function FormulaireInscription() {
   if (emailAConfirmer) {
     return (
       <div className="flex flex-col items-center gap-3 py-4 text-center">
-        <MailCheck className="h-10 w-10 text-green-600" />
+        <MailCheck className="h-10 w-10 text-succes" />
         <p className="font-medium">Vérifiez votre boîte mail</p>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-texte-2">
           Un lien de confirmation a été envoyé à <strong>{email}</strong>.
           Cliquez dessus, puis connectez-vous. Votre compte sera ensuite soumis
           à validation par un administrateur.
@@ -81,7 +80,7 @@ export function FormulaireInscription() {
   return (
     <form onSubmit={sInscrire} className="space-y-4">
       <div>
-        <label htmlFor="nomComplet" className="mb-1 block text-sm font-medium">
+        <label htmlFor="nomComplet" className="etiquette">
           Nom complet
         </label>
         <input
@@ -91,11 +90,11 @@ export function FormulaireInscription() {
           autoComplete="name"
           value={nomComplet}
           onChange={(e) => setNomComplet(e.target.value)}
-          className="block w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage"
+          className="champ"
         />
       </div>
       <div>
-        <label htmlFor="telephone" className="mb-1 block text-sm font-medium">
+        <label htmlFor="telephone" className="etiquette">
           Téléphone
         </label>
         <input
@@ -106,11 +105,11 @@ export function FormulaireInscription() {
           placeholder="+225 07 XX XX XX XX"
           value={telephone}
           onChange={(e) => setTelephone(e.target.value)}
-          className="block w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage"
+          className="champ"
         />
       </div>
       <div>
-        <label htmlFor="email" className="mb-1 block text-sm font-medium">
+        <label htmlFor="email" className="etiquette">
           Email
         </label>
         <input
@@ -120,11 +119,11 @@ export function FormulaireInscription() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="block w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage"
+          className="champ"
         />
       </div>
       <div>
-        <label htmlFor="motDePasse" className="mb-1 block text-sm font-medium">
+        <label htmlFor="motDePasse" className="etiquette">
           Mot de passe
         </label>
         <input
@@ -135,34 +134,34 @@ export function FormulaireInscription() {
           autoComplete="new-password"
           value={motDePasse}
           onChange={(e) => setMotDePasse(e.target.value)}
-          className="block w-full rounded-lg border border-gray-300 px-3 py-3 text-base focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage"
+          className="champ"
         />
-        <p className="mt-1 text-xs text-gray-500">8 caractères minimum.</p>
+        <p className="mt-1 text-xs text-texte-3">8 caractères minimum.</p>
       </div>
       <div>
-        <label htmlFor="role" className="mb-1 block text-sm font-medium">
+        <label htmlFor="role" className="etiquette">
           Rôle demandé
         </label>
         <select
           id="role"
           value={roleSouhaite}
           onChange={(e) => setRoleSouhaite(e.target.value as RoleUtilisateur)}
-          className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-base focus:border-assemblage focus:outline-none focus:ring-1 focus:ring-assemblage"
+          className="champ"
         >
-          {ROLES_PROPOSES.map((role) => (
+          {ROLES_DEMANDABLES.map((role) => (
             <option key={role} value={role}>
               {LIBELLES_ROLES[role]}
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-texte-3">
           Le rôle définitif est confirmé par l&apos;administrateur à la
           validation du compte.
         </p>
       </div>
 
       {erreur && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="message-erreur" role="alert">
           {erreur}
         </p>
       )}
@@ -170,7 +169,7 @@ export function FormulaireInscription() {
       <button
         type="submit"
         disabled={enCours}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-assemblage px-4 py-3 text-base font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+        className="bouton-principal w-full"
       >
         {enCours && <Loader2 className="h-5 w-5 animate-spin" />}
         Créer mon compte
