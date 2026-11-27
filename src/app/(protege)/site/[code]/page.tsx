@@ -80,7 +80,7 @@ export default async function PageSite({
                 {site.departement} · {site.region}
               </dd>
               <dt className="text-texte-2">Entreprise</dt>
-              <dd>{site.lot?.entreprise_titulaire || "—"}</dd>
+              <dd>{site.lot?.entreprise?.nom || "—"}</dd>
             </dl>
             <EtiquettesSite site={site} />
           </section>

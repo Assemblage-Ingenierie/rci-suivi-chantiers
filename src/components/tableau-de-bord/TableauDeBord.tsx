@@ -5,10 +5,11 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { PosteDef } from "@/lib/formulaires/types";
+import type { CorpsEtat, PosteDef } from "@/lib/formulaires/types";
+import { corpsEtatSites } from "@/lib/formulaires/avancement";
+import { BarreCorpsEtat, LegendeCorpsEtat } from "@/components/BarreCorpsEtat";
 import {
   avancementGlobal,
-  avancementParCorpsEtat,
   pct,
   syntheseLots,
   TERMINES,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/tableau-de-bord/calculs";
 import { couleurStatut, ORDRE_STATUTS } from "@/lib/tableau-de-bord/couleurs";
 import { achevementEstime, CourbeEvolution, rythme, type PointEvolution } from "./CourbeEvolution";
-import { LigneBarre, LigneEffectif } from "./Barres";
+import { LigneEffectif } from "./Barres";
 import { Remplissage } from "./Remplissage";
 import { suivi, synthese as syntheseRemplissage, type LigneRemplissage } from "@/lib/suivi/remplissage";
 
@@ -85,6 +86,7 @@ export function TableauDeBord({
   lots,
   lotsMoe,
   postes,
+  corps,
   evolutionInitiale,
   remplissage,
 }: {
@@ -92,6 +94,7 @@ export function TableauDeBord({
   lots: LotRef[];
   lotsMoe: LotMoeRef[];
   postes: PosteDef[];
+  corps: CorpsEtat[];
   evolutionInitiale: PointEvolution[];
   remplissage: LigneRemplissage[];
 }) {
@@ -111,7 +114,16 @@ export function TableauDeBord({
   const filtres = useMemo(() => (lotMoe ? sites.filter((s) => s.lot_moe_id === lotMoe) : sites), [sites, lotMoe]);
   const synthese = useMemo(() => syntheseLots(filtres, lots), [filtres, lots]);
   const global = useMemo(() => avancementGlobal(synthese), [synthese]);
-  const corpsEtat = useMemo(() => avancementParCorpsEtat(filtres, postes), [filtres, postes]);
+  const sitesPostes = useMemo(
+    () => filtres.map((s) => ({ electricite: s.electricite, type_latrines: s.type_latrines, postes: s.moe_postes })),
+    [filtres]
+  );
+  const corpsEtat = useMemo(() => corpsEtatSites(sitesPostes, postes, corps), [sitesPostes, postes, corps]);
+  const corpsParLot = useMemo(() => {
+    const m = new Map<number, typeof sitesPostes>();
+    filtres.forEach((s, i) => m.set(s.lot_id, [...(m.get(s.lot_id) ?? []), sitesPostes[i]]));
+    return new Map([...m].map(([lot, ss]) => [lot, corpsEtatSites(ss, postes, corps)]));
+  }, [filtres, sitesPostes, postes, corps]);
   const parSite = useMemo(() => new Map(remplissage.map((l) => [l.site_id, l])), [remplissage]);
   const sitesSuivis = useMemo(() => filtres.filter((s) => suivi(parSite.get(s.id))).map((s) => s.id), [filtres, parSite]);
   const syntheses = useMemo(() => syntheseRemplissage(sitesSuivis, parSite), [sitesSuivis, parSite]);
@@ -168,7 +180,7 @@ export function TableauDeBord({
           titre="Chantiers arrêtés"
           valeur={arretes}
           ton={arretes ? "text-danger" : undefined}
-          href={arretes ? `/difficultes?type=arret${suffixeFiltre}` : undefined}
+          href={arretes ? `/alertes?famille=presence${suffixeFiltre}` : undefined}
         >
           {pct(n ? (100 * arretes) / n : null)} des sites
           {arretes > 0 && <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-accent">voir <ArrowRight className="h-3 w-3" /></span>}
@@ -177,9 +189,9 @@ export function TableauDeBord({
           titre="Sites à suivre"
           valeur={aSuivre}
           ton={aSuivre ? "text-alerte" : undefined}
-          href={`/difficultes${lotMoe ? `?lot_moe=${lotMoe}` : ""}`}
+          href={`/alertes${lotMoe ? `?lot_moe=${lotMoe}` : ""}`}
         >
-          arrêt, problème MOE, écart UG / MOE, rapport manquant
+          au moins une alerte critique (arrêt, sécurité, qualité, retard, écart)
           <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-accent">détail <ArrowRight className="h-3 w-3" /></span>
         </Indicateur>
       </div>
@@ -213,7 +225,7 @@ export function TableauDeBord({
                 couleur={couleurStatut(s.cle === "aucun" ? null : s.cle)}
                 nombre={compte(s.cle)}
                 total={n}
-                href={s.cle === "arrete" ? `/difficultes?type=arret${suffixeFiltre}` : s.cle === "aucun" ? `/difficultes?type=rapport${suffixeFiltre}` : undefined}
+                href={s.cle === "arrete" ? `/alertes?famille=presence${suffixeFiltre}` : s.cle === "aucun" ? `/suivi${lotMoe ? `?lot_moe=${lotMoe}` : ""}` : undefined}
               />
             ))}
           </div>
@@ -236,8 +248,9 @@ export function TableauDeBord({
         titre="Avancement par lot de travaux"
         aide={
           <>
-            Moyenne des sites du lot. Le trait vertical marque l&apos;avancement global ({pct(global)}) ; en orange, les lots à
-            plus de {RETARD_LOT_POINTS} points en dessous.
+            Chaque barre est découpée par corps d&apos;état : largeur = part du montant DQE, partie remplie = avancement
+            (détail au survol). Moyenne des sites pondérée par leur montant. Le trait vertical marque l&apos;avancement
+            global ({pct(global)}) ; en orange, les lots à plus de {RETARD_LOT_POINTS} points en dessous.
           </>
         }
         droite={
@@ -262,25 +275,22 @@ export function TableauDeBord({
             const enRetard = global !== null && l.moe < global - RETARD_LOT_POINTS;
             return (
               <div key={l.id} className="break-inside-avoid">
-                <LigneBarre
-                  libelle={
-                    <>
-                      <span className="inline-block w-6 text-right tabular-nums text-texte-3">{l.id}</span> {l.nom}
-                    </>
-                  }
-                  titre={`Lot ${l.id} – ${l.nom} : ${l.sites} sites, ${pct(l.moe, 1)}, ${l.arretes} arrêté(s), ${l.termines} terminé(s)`}
-                  valeur={l.moe}
-                  repere={global}
-                  ton={enRetard ? "alerte" : "normal"}
-                  largeurLibelle="w-44"
-                  suffixe={
-                    l.arretes ? (
+                <div
+                  className="flex items-center gap-2 py-[3px] text-sm"
+                  title={`Lot ${l.id} – ${l.nom} : ${l.sites} sites, ${pct(l.moe, 1)}, ${l.arretes} arrêté(s), ${l.termines} terminé(s)`}
+                >
+                  <span className={`w-44 shrink-0 truncate ${enRetard ? "font-semibold text-alerte" : ""}`}>
+                    <span className="inline-block w-6 text-right tabular-nums text-texte-3">{l.id}</span> {l.nom}
+                  </span>
+                  <BarreCorpsEtat segments={corpsParLot.get(l.id) ?? []} repere={global} ton={enRetard ? "alerte" : "normal"} className="flex-1" />
+                  <span className="w-16 shrink-0 text-xs">
+                    {l.arretes ? (
                       <span className="font-semibold text-danger">{l.arretes} arrêté{l.arretes > 1 ? "s" : ""}</span>
                     ) : (
                       ""
-                    )
-                  }
-                />
+                    )}
+                  </span>
+                </div>
               </div>
             );
           })}
@@ -291,19 +301,10 @@ export function TableauDeBord({
       <div className="grid gap-4 xl:grid-cols-2">
         <Bloc
           titre="Avancement par corps d'état"
-          aide="Moyenne sur les sites des postes du DQE type de la salle de classe (entre parenthèses : poids du poste), puis du bloc latrines."
+          aide="Salle de classe et latrines réunies, pondérées par les montants du DQE : largeur = part du montant, partie remplie = avancement (un site sans rapport MOE compte 0 %)."
         >
-          <div>
-            {corpsEtat.map((c) => (
-              <LigneBarre
-                key={c.code}
-                libelle={c.poids !== null ? `${c.libelle.split(/[,(—]/)[0].trim()} (${c.poids} %)` : c.libelle}
-                titre={c.libelle}
-                valeur={c.valeur}
-                largeurLibelle="w-48"
-              />
-            ))}
-          </div>
+          <BarreCorpsEtat segments={corpsEtat} hauteur="h-6" className="mb-3" />
+          <LegendeCorpsEtat segments={corpsEtat} />
         </Bloc>
         <Bloc titre="Carte des sites">
           <CarteSites sites={filtres} />

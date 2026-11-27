@@ -66,6 +66,8 @@ verifier("UG : une ligne par site (387)", n === 387, `${n}`);
 const nCtrl = (await en(U.ctrl, "select count(*)::int n from public.chantierci_v_etat_sites")).rows[0].n;
 verifier("contrôleur MOE : seulement ses sites (RLS appliquée)", nCtrl === 16, `${nCtrl}`);
 
+// Position approximative : site sans coordonnées (la cartographie positionne L19-01).
+await db.query("update public.chantierci_sites set latitude = null, longitude = null where id = $1", [L1901]);
 let e = await etat(U.ug, L1901);
 verifier("site sans visite : avancement MOE vide", e.moe_avancement === null && e.moe_date === null);
 verifier("position approximative = chef-lieu du département",

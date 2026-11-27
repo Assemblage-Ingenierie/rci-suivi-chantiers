@@ -22,6 +22,8 @@ pour mémoire : il n'est plus utilisé.
 | `migrations/20261128100000_suivi_remplissage.sql` | Suivi du remplissage des formulaires par site et par semaine |
 | `migrations/20261129100000_suivi_attendu.sql` | Suivi : formulaire attendu seulement si l'acteur a déclaré le chantier « en cours » |
 | `migrations/20261130100000_performances.sql` | Performances : avancement enregistré dans chaque formulaire, évolution et remplissage calculés en une passe |
+| `migrations/20261201100000_entreprises_positions.sql` | Entreprises titulaires des lots (provisoires) et positions GPS des sites (cartographie PATEB v4) |
+| `migrations/20261202100000_dqe_alertes.sql` | Avancement pondéré par les montants du DQE (classe + latrines), corps d'état, date de début des sites, paramètres des alertes, 5 positions de plus |
 | `seed/comptes_test.sql` | 6 comptes de test (développement uniquement) |
 | `seed/donnees_fictives.sql` | Visites et commentaires fictifs sur les 387 sites (test uniquement, rejouable) |
 | `installation.sql` | **Script unique pour une base vierge** (généré : réinitialisation + toutes les migrations) |
@@ -54,7 +56,8 @@ pour mémoire : il n'est plus utilisé.
 nouvelles migrations, dans l'ordre, chacune dans une nouvelle requête :
 `20261125100000_formulaires.sql`, `20261126100000_tableau_de_bord.sql`,
 `20261127100000_tableau_de_bord_v2.sql`, `20261128100000_suivi_remplissage.sql`,
-`20261129100000_suivi_attendu.sql` puis `20261130100000_performances.sql`.
+`20261129100000_suivi_attendu.sql`, `20261130100000_performances.sql`,
+`20261201100000_entreprises_positions.sql` puis `20261202100000_dqe_alertes.sql`.
 Elles sont rejouables. Ensuite, en test, `seed/donnees_fictives.sql`.
 
 `installation.sql` est généré à partir de `migrations/` par

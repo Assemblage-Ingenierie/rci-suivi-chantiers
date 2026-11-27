@@ -114,19 +114,23 @@ const tout = async (ouvrage, pct) => Object.fromEntries(
   (await db.query("select code from public.chantierci_postes where ouvrage = $1", [ouvrage])).rows.map((r) => [r.code, pct]));
 verifier("salle 100 % + latrines 100 % = 100 %",
   (await avancement(L1901, { classe: await tout("classe", 100), latrines: await tout("latrines_seches", 100) })) === 100);
-verifier("salle 100 % + latrines 0 % = 80 %",
-  (await avancement(L1901, { classe: await tout("classe", 100), latrines: {} })) === 80);
+// Montants DQE (FCFA HT) : classe avec électricité 10 237 380, sans 9 883 590 ;
+// latrines sèches 2 464 550.
+verifier("salle 100 % + latrines 0 % = part de la salle au DQE (80,6 %)",
+  (await avancement(L1901, { classe: await tout("classe", 100), latrines: {} })) === 80.6);
+verifier("site sans électricité : salle 100 % = 80,0 % (électricité au montant « sans électricité »)",
+  (await avancement(L0605, { classe: await tout("classe", 100) })) === 80);
 const sansElec = await tout("classe", 100);
 delete sansElec.electricite;
-verifier("site sans électricité : le poste électricité est ignoré",
-  (await avancement(L0605, { classe: sansElec })) === 80);
-verifier("fondations seules (18 %) à 100 % = 14,4 %",
-  (await avancement(L1901, { classe: { fondations: 100 } })) === 14.4);
+verifier("site sans électricité : poste électricité non saisi = 78,9 %",
+  (await avancement(L0605, { classe: sansElec })) === 78.9);
+verifier("fondations seules à 100 % = 17,4 % (2 210 700 / 12 701 930)",
+  (await avancement(L1901, { classe: { fondations: 100 } })) === 17.4);
 const nulle = (await db.query("select avancement from public.chantierci_v_visites where id = $1", [vCstc.id])).rows[0].avancement;
 verifier("formulaire CSTC sans postes : pas d'avancement", nulle === null);
 await en(U.admin, "update public.chantierci_postes set poids = 0 where ouvrage = 'classe' and code <> 'fondations'");
-verifier("changer un poids recalcule l'avancement",
-  (await avancement(L1901, { classe: { fondations: 50 } })) === 40);
+verifier("changer un poids recalcule l'avancement (23,6 %)",
+  (await avancement(L1901, { classe: { fondations: 50 } })) === 23.6);
 
 // --- Photos ---------------------------------------------------------------------------------
 const ph = await en(U.cstc,

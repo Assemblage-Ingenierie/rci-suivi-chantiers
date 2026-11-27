@@ -2,7 +2,7 @@ import { exigerRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { chargerReferentielCalcul } from "@/lib/formulaires/chargement";
 import { COLONNES_SITES, dateLongue, type SiteTableau } from "@/lib/tableau-de-bord/calculs";
-import { aSuivre, difficultesSite } from "@/lib/tableau-de-bord/difficultes";
+import { alertesSite, nbCritiques, parametresAlertes } from "@/lib/alertes/regles";
 import { TableauDeBord } from "@/components/tableau-de-bord/TableauDeBord";
 import type { PointEvolution } from "@/components/tableau-de-bord/CourbeEvolution";
 import { NB_SEMAINES, type LigneRemplissage } from "@/lib/suivi/remplissage";
@@ -19,12 +19,12 @@ export default async function PageTableauDeBord() {
     { data: sites, error },
     { data: lots },
     { data: lotsMoe },
-    { postes },
+    { postes, corps, parametres },
     { data: evolution, error: erreurEvolution },
     { data: remplissage },
   ] = await Promise.all([
       supabase.from("chantierci_v_etat_sites").select(COLONNES_SITES.tableau).order("code").range(0, 999),
-      supabase.from("chantierci_lots").select("id, nom, poids, entreprise_titulaire").order("id"),
+      supabase.from("chantierci_lots").select("id, nom, poids").order("id"),
       supabase.from("chantierci_lots_moe").select("id, nom, regions").order("id"),
       chargerReferentielCalcul(supabase),
       supabase.rpc("chantierci_evolution_avancement", { p_lot_moe: null }),
@@ -35,6 +35,7 @@ export default async function PageTableauDeBord() {
   // Sites allégés pour le navigateur : les réponses des formulaires ne servent
   // qu'à compter les sites à suivre, calculé ici.
   const aujourdhui = new Date();
+  const regles = parametresAlertes(parametres);
   const sitesTableau: SiteTableau[] = (sites ?? []).map((s) => ({
     id: s.id,
     code: s.code,
@@ -52,9 +53,10 @@ export default async function PageTableauDeBord() {
     moe_date: s.moe_date,
     moe_avancement: s.moe_avancement,
     moe_postes: s.moe_postes,
+    montant: s.montant,
     ecart_ug_moe: s.ecart_ug_moe,
     discordance: s.discordance,
-    a_suivre: aSuivre(difficultesSite(s, aujourdhui)),
+    a_suivre: nbCritiques(alertesSite(s, regles, aujourdhui)) > 0,
   }));
 
   return (
@@ -77,6 +79,7 @@ export default async function PageTableauDeBord() {
           lots={(lots ?? []).map((l) => ({ ...l, poids: Number(l.poids) }))}
           lotsMoe={lotsMoe ?? []}
           postes={postes}
+          corps={corps}
           evolutionInitiale={(evolution ?? []) as PointEvolution[]}
           remplissage={(remplissage ?? []) as LigneRemplissage[]}
         />

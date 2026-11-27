@@ -1,13 +1,15 @@
 /**
  * Agrégats du tableau de bord (cahier § 5), calculés à partir de la vue
  * chantierci_v_etat_sites (une ligne par site) :
- *   - site   = avancement du dernier rapport MOE (calculé par la base) ;
- *   - lot    = moyenne des sites du lot (un site sans rapport MOE compte 0 %) ;
- *   - global = Σ (poids du lot × avancement du lot) / Σ poids.
+ *   - site   = avancement du dernier rapport MOE (calculé par la base, postes
+ *              pondérés par les montants du DQE) ;
+ *   - lot    = moyenne des sites du lot pondérée par leur montant DQE (un site
+ *              sans rapport MOE compte 0 %) ;
+ *   - global = Σ (poids du lot × avancement du lot) / Σ poids (poids d'un lot
+ *              = montant DQE de ses sites par défaut).
  */
 import type { Database } from "@/lib/database.types";
-import type { PosteDef, StatutChantier, ValeursPostes } from "@/lib/formulaires/types";
-import { avancementOuvrage, ouvrageLatrines, postesApplicables } from "@/lib/formulaires/avancement";
+import type { StatutChantier } from "@/lib/formulaires/types";
 
 export type EtatSite = Database["public"]["Views"]["chantierci_v_etat_sites"]["Row"];
 
@@ -18,10 +20,8 @@ export type EtatSite = Database["public"]["Views"]["chantierci_v_etat_sites"]["R
  */
 export const COLONNES_SITES = {
   suivi: "id, code, nom, localite, lot_id, lot_moe_id, moe_statut",
-  difficultes:
-    "id, code, nom, localite, lot_id, lot_moe_id, moe_statut, moe_date, moe_avancement, moe_arrete_depuis, moe_reponses, ug_date, ug_avancement, ug_avancement_moe_compare, ecart_ug_moe, discordance, ug_reponses, cstc_date, cstc_reponses",
   tableau:
-    "id, code, nom, departement, localite, lot_id, lot_moe_id, electricite, type_latrines, latitude, longitude, origine_position, moe_statut, moe_date, moe_avancement, moe_postes, moe_arrete_depuis, moe_reponses, ug_date, ug_avancement, ug_avancement_moe_compare, ecart_ug_moe, discordance, ug_reponses, cstc_date, cstc_reponses",
+    "id, code, nom, departement, localite, lot_id, lot_moe_id, electricite, type_latrines, latitude, longitude, origine_position, moe_statut, moe_date, moe_avancement, moe_postes, moe_arrete_depuis, moe_reponses, ug_statut, ug_date, ug_avancement, ug_avancement_moe_compare, ecart_ug_moe, discordance, ug_reponses, cstc_statut, cstc_date, cstc_reponses, montant, date_debut",
 } as const;
 
 /** Site tel qu'envoyé à l'onglet Suivi. */
@@ -48,11 +48,12 @@ export type SiteTableau = Pick<
   | "moe_postes"
   | "ecart_ug_moe"
   | "discordance"
+  | "montant"
 > & {
-  /** Au moins une difficulté sérieuse (gravité ≥ 2), calculé côté serveur. */
+  /** Au moins une alerte critique (calculé côté serveur, voir lib/alertes). */
   a_suivre: boolean;
 };
-export type LotRef = { id: number; nom: string; poids: number; entreprise_titulaire: string };
+export type LotRef = { id: number; nom: string; poids: number };
 
 export type SyntheseLot = {
   id: number;
@@ -65,14 +66,21 @@ export type SyntheseLot = {
   termines: number;
 };
 
-const moyenne = (valeurs: number[]) => (valeurs.length ? valeurs.reduce((a, b) => a + b, 0) / valeurs.length : null);
-
 export const avancementMoe = (s: Pick<EtatSite, "moe_avancement">) => (s.moe_avancement === null ? 0 : Number(s.moe_avancement));
 
 export const TERMINES: StatutChantier[] = ["termine", "receptionne"];
 
+/** Montant DQE d'un site (1 si inconnu : base non migrée → moyenne simple). */
+const montantDe = (s: { montant?: number | null }) => (s.montant ? Number(s.montant) : 1);
+
+/** Avancement d'un ensemble de sites, pondéré par leur montant DQE (null si aucun site). */
+export function avancementPondere(sites: Pick<EtatSite, "moe_avancement" | "montant">[]): number | null {
+  const total = sites.reduce((a, s) => a + montantDe(s), 0);
+  return total ? sites.reduce((a, s) => a + montantDe(s) * avancementMoe(s), 0) / total : null;
+}
+
 export function syntheseLots(
-  sites: Pick<EtatSite, "lot_id" | "moe_avancement" | "moe_statut">[],
+  sites: Pick<EtatSite, "lot_id" | "moe_avancement" | "moe_statut" | "montant">[],
   lots: LotRef[]
 ): SyntheseLot[] {
   return lots
@@ -83,7 +91,7 @@ export function syntheseLots(
         nom: lot.nom,
         poids: Number(lot.poids),
         sites: duLot.length,
-        moe: moyenne(duLot.map(avancementMoe)) ?? 0,
+        moe: avancementPondere(duLot) ?? 0,
         arretes: duLot.filter((s) => s.moe_statut === "arrete").length,
         termines: duLot.filter((s) => s.moe_statut && TERMINES.includes(s.moe_statut)).length,
       };
@@ -96,37 +104,6 @@ export function avancementGlobal(lots: SyntheseLot[]): number | null {
   const poids = lots.reduce((a, l) => a + l.poids, 0);
   if (poids <= 0) return null;
   return lots.reduce((a, l) => a + l.poids * l.moe, 0) / poids;
-}
-
-/**
- * Avancement moyen de chaque corps d'état de la salle de classe (postes du DQE
- * type) sur les sites, puis des latrines (ouvrage complet).
- */
-export function avancementParCorpsEtat(
-  sites: Pick<EtatSite, "electricite" | "type_latrines" | "moe_postes">[],
-  postes: PosteDef[]
-): { code: string; libelle: string; poids: number | null; valeur: number }[] {
-  const lignes = postesApplicables(postes, "classe", true).map((p) => {
-    const concernes = sites.filter((s) => p.code !== "electricite" || s.electricite);
-    return {
-      code: p.code,
-      libelle: p.libelle,
-      poids: p.poids,
-      valeur:
-        moyenne(concernes.map((s) => Number(((s.moe_postes as ValeursPostes | null)?.classe ?? {})[p.code] ?? 0))) ?? 0,
-    };
-  });
-  const latrines =
-    moyenne(
-      sites.map(
-        (s) =>
-          avancementOuvrage(
-            (s.moe_postes as ValeursPostes | null)?.latrines,
-            postesApplicables(postes, ouvrageLatrines(s.type_latrines), s.electricite)
-          ) ?? 0
-      )
-    ) ?? 0;
-  return [...lignes, { code: "latrines", libelle: "Bloc latrines (ensemble)", poids: null, valeur: latrines }];
 }
 
 /** Nombre de jours entre une date (AAAA-MM-JJ) et aujourd'hui. */

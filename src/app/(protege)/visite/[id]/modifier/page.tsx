@@ -41,7 +41,7 @@ export default async function PageModifierVisite({ params }: { params: { id: str
         nom: site.nom,
         lot_id: site.lot_id,
         lot_nom: site.lot?.nom ?? "",
-        entreprise: site.lot?.entreprise_titulaire ?? "",
+        entreprise: site.lot?.entreprise?.nom ?? "",
         localite: site.localite,
         electricite: site.electricite,
         type_latrines: site.type_latrines,

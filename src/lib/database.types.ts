@@ -48,11 +48,25 @@ export type Database = {
         Update: { id?: number; nom?: string; regions?: string[]; titulaire?: string }
         Relationships: []
       }
-      chantierci_lots: {
-        Row: { id: number; nom: string; entreprise_titulaire: string; poids: number }
-        Insert: { id: number; nom: string; entreprise_titulaire?: string; poids?: number }
-        Update: { id?: number; nom?: string; entreprise_titulaire?: string; poids?: number }
+      chantierci_entreprises: {
+        Row: { id: number; nom: string }
+        Insert: { id?: number; nom: string }
+        Update: { id?: number; nom?: string }
         Relationships: []
+      }
+      chantierci_lots: {
+        Row: { id: number; nom: string; entreprise_id: number | null; poids: number }
+        Insert: { id: number; nom: string; entreprise_id?: number | null; poids?: number }
+        Update: { id?: number; nom?: string; entreprise_id?: number | null; poids?: number }
+        Relationships: [
+          {
+            foreignKeyName: "chantierci_lots_entreprise_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "chantierci_entreprises"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       chantierci_sites: {
         Row: {
@@ -70,6 +84,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           a_verifier: string
+          date_debut: string | null
           actif: boolean
           updated_at: string
         }
@@ -88,6 +103,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           a_verifier?: string
+          date_debut?: string | null
           actif?: boolean
           updated_at?: string
         }
@@ -106,6 +122,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           a_verifier?: string
+          date_debut?: string | null
           actif?: boolean
           updated_at?: string
         }
@@ -198,9 +215,39 @@ export type Database = {
         Relationships: []
       }
       chantierci_postes: {
-        Row: { ouvrage: string; code: string; libelle: string; poids: number; ordre: number }
-        Insert: { ouvrage: string; code: string; libelle: string; poids: number; ordre: number }
-        Update: { ouvrage?: string; code?: string; libelle?: string; poids?: number; ordre?: number }
+        Row: {
+          ouvrage: string
+          code: string
+          libelle: string
+          poids: number
+          poids_sans_electricite: number | null
+          corps_etat: string | null
+          ordre: number
+        }
+        Insert: {
+          ouvrage: string
+          code: string
+          libelle: string
+          poids: number
+          poids_sans_electricite?: number | null
+          corps_etat?: string | null
+          ordre: number
+        }
+        Update: {
+          ouvrage?: string
+          code?: string
+          libelle?: string
+          poids?: number
+          poids_sans_electricite?: number | null
+          corps_etat?: string | null
+          ordre?: number
+        }
+        Relationships: []
+      }
+      chantierci_corps_etat: {
+        Row: { code: string; libelle: string; ordre: number }
+        Insert: { code: string; libelle: string; ordre: number }
+        Update: { code?: string; libelle?: string; ordre?: number }
         Relationships: []
       }
       chantierci_visites: {
@@ -342,6 +389,9 @@ export type Database = {
           ug_commentaire: string | null
           cstc_reponses: Json | null
           cstc_commentaire: string | null
+          /** Montant DQE du site (FCFA HT). */
+          montant: number | null
+          date_debut: string | null
         }
         Relationships: []
       }

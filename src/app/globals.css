@@ -32,3 +32,17 @@ body {
     @apply rounded-champ bg-danger-clair px-3 py-2 text-sm text-danger;
   }
 }
+
+/* Impression (rapport d'export enregistré en PDF) */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@media print {
+  html,
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
