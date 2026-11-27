@@ -188,20 +188,20 @@ select
                         when c.statut = 'en_cours' and c.r > 0.96 then '["intemperies"]'::jsonb
                         else '["aucun"]'::jsonb end)
     else jsonb_build_object(
-      'quantites', jsonb_strip_nulls(jsonb_build_object(
-        'dallage', round((78 * pg_temp.pct(c.pc, 'fondations'))::numeric, 1),
-        'mur_agglos', round((136 * pg_temp.pct(c.pc, 'elevation'))::numeric, 1),
-        'claustras', round((24 * pg_temp.pct(c.pc, 'elevation'))::numeric, 1),
-        'enduits', round((285 * pg_temp.pct(c.pc, 'elevation'))::numeric),
-        'couverture', round((134 * pg_temp.pct(c.pc, 'couverture'))::numeric),
-        'faux_plafond', round((116 * pg_temp.pct(c.pc, 'faux_plafond'))::numeric),
-        'portes_2v', round((1 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'portes_1v', round((1 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'persiennes', round((2 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'tableau', round((5.95 * pg_temp.pct(c.pc, 'menuiserie'))::numeric, 2),
-        'placards', round((2 * pg_temp.pct(c.pc, 'menuiserie'))::numeric),
-        'reglettes', case when c.electricite then round((7 * pg_temp.pct(c.pc, 'electricite'))::numeric) end,
-        'cabines', round((3 * c.p_lat / 100)::numeric))),
+      -- Suivi environnemental et social (« oui » = mesure respectée).
+      'es', jsonb_build_object(
+        'dechets', case when c.r < 0.85 then 'oui' else 'non' end,
+        'drainage', case when c.r < 0.92 then 'oui' else 'non' end,
+        'nuisances', case when c.r < 0.9 then 'oui' else 'non' end,
+        'hygiene', case when c.r < 0.8 then 'oui' else 'non' end,
+        'emploi_local', case when c.r < 0.95 then 'oui' else 'non' end,
+        'pas_enfants', case when c.r < 0.995 then 'oui' else 'non' end,
+        'code_conduite', case when c.r < 0.75 then 'oui' else 'non' end,
+        'mecanisme_plaintes', case when c.r < 0.7 then 'oui' else 'non' end),
+      'plaintes', case when c.r > 0.97 then 'oui' else 'non' end,
+      'es_observations', case when c.r >= 0.7
+        then 'Code de conduite non affiché et mécanisme de plaintes à présenter au COGES. Rappel fait à l''entreprise.'
+        else '' end,
       'difficultes', case when c.statut = 'arrete' then '["entreprise_absente"]'::jsonb
                           when c.lent and c.statut = 'en_cours' then '["materiaux_manquants"]'::jsonb
                           when c.r > 0.96 and c.p > 0 then '["stockage_non_protege"]'::jsonb
