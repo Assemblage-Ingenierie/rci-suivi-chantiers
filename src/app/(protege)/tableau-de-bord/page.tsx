@@ -5,7 +5,9 @@ import { COLONNES_SITES, dateLongue, type SiteTableau } from "@/lib/tableau-de-b
 import { alertesSite, nbCritiques, parametresAlertes } from "@/lib/alertes/regles";
 import { TableauDeBord } from "@/components/tableau-de-bord/TableauDeBord";
 import type { PointEvolution } from "@/components/tableau-de-bord/CourbeEvolution";
-import { NB_SEMAINES, type LigneRemplissage } from "@/lib/suivi/remplissage";
+import { NB_SEMAINES, suivi, synthese, type LigneRemplissage } from "@/lib/suivi/remplissage";
+import { corpsEtatSites, type SegmentCorpsEtat } from "@/lib/formulaires/avancement";
+import type { RemplissageTableau } from "@/components/tableau-de-bord/TableauDeBord";
 import { EnPreparation } from "@/components/EnPreparation";
 import { MARQUE } from "@/theme/marque";
 
@@ -52,12 +54,32 @@ export default async function PageTableauDeBord() {
     moe_statut: s.moe_statut,
     moe_date: s.moe_date,
     moe_avancement: s.moe_avancement,
-    moe_postes: s.moe_postes,
     montant: s.montant,
     ecart_ug_moe: s.ecart_ug_moe,
     discordance: s.discordance,
     a_suivre: nbCritiques(alertesSite(s, regles, aujourdhui)) > 0,
   }));
+
+  // Agrégats calculés ici (le navigateur ne reçoit ni les postes de chaque site
+  // ni le détail du remplissage) : corps d'état par lot, remplissage par périmètre.
+  const parLot = new Map<number, { electricite: boolean; type_latrines: "a_eau" | "seches"; postes: unknown }[]>();
+  for (const s of sites ?? [])
+    parLot.set(s.lot_id, [...(parLot.get(s.lot_id) ?? []), { electricite: s.electricite, type_latrines: s.type_latrines, postes: s.moe_postes }]);
+  const corpsParLot: Record<number, SegmentCorpsEtat[]> = Object.fromEntries(
+    [...parLot].map(([lot, ss]) => [lot, corpsEtatSites(ss, postes, corps)])
+  );
+  const lignes = (remplissage ?? []) as LigneRemplissage[];
+  const ligneParSite = new Map(lignes.map((l) => [l.site_id, l]));
+  const perimetre = (lotMoe: number | null) => {
+    const ids = (sites ?? []).filter((s) => !lotMoe || s.lot_moe_id === lotMoe).map((s) => s.id).filter((id) => suivi(ligneParSite.get(id)));
+    return { syntheses: synthese(ids, ligneParSite), nbSuivis: ids.length };
+  };
+  const remplissageTableau: RemplissageTableau | null = lignes.length
+    ? {
+        dateRef: lignes[0].date_ref,
+        parPerimetre: Object.fromEntries([["tous", perimetre(null)], ...(lotsMoe ?? []).map((m) => [String(m.id), perimetre(m.id)])]),
+      }
+    : null;
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 lg:p-6">
@@ -78,10 +100,9 @@ export default async function PageTableauDeBord() {
           sites={sitesTableau}
           lots={(lots ?? []).map((l) => ({ ...l, poids: Number(l.poids) }))}
           lotsMoe={lotsMoe ?? []}
-          postes={postes}
-          corps={corps}
+          corpsParLot={corpsParLot}
           evolutionInitiale={(evolution ?? []) as PointEvolution[]}
-          remplissage={(remplissage ?? []) as LigneRemplissage[]}
+          remplissage={remplissageTableau}
         />
       )}
     </div>

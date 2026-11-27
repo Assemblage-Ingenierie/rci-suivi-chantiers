@@ -45,7 +45,6 @@ export type SiteTableau = Pick<
   | "moe_statut"
   | "moe_date"
   | "moe_avancement"
-  | "moe_postes"
   | "ecart_ug_moe"
   | "discordance"
   | "montant"

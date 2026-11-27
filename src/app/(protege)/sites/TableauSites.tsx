@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Search } from "lucide-react";
 import { LIBELLES_LATRINES, type TypeLatrines } from "@/lib/constants";
-import type { CorpsEtat, PosteDef, StatutChantier } from "@/lib/formulaires/types";
-import { corpsEtatSites } from "@/lib/formulaires/avancement";
+import type { StatutChantier } from "@/lib/formulaires/types";
+import type { SegmentCorpsEtat } from "@/lib/formulaires/avancement";
 import { dateCourte } from "@/lib/tableau-de-bord/calculs";
 import { BarreCorpsEtat } from "@/components/BarreCorpsEtat";
 
@@ -26,8 +26,8 @@ export type LigneSite = {
   avancement: number | null;
   statut: StatutChantier | null;
   date_rapport: string | null;
-  /** Postes du dernier rapport MOE (diagramme par corps d'état). */
-  postes: unknown;
+  /** Avancement par corps d'état du dernier rapport MOE : [code, montant, réalisé] (calculé côté serveur). */
+  parts: [string, number, number][];
 };
 
 export type LotSite = { id: number; nom: string; entreprise: string };
@@ -39,14 +39,13 @@ function sansAccents(s: string) {
 export function TableauSites({
   sites,
   lots,
-  postes,
   corps,
 }: {
   sites: LigneSite[];
   lots: LotSite[];
-  postes: PosteDef[];
-  corps: CorpsEtat[];
+  corps: { code: string; libelle: string }[];
 }) {
+  const libelleCorps = useMemo(() => new Map(corps.map((c) => [c.code, c.libelle])), [corps]);
   const [recherche, setRecherche] = useState("");
   const [lot, setLot] = useState("");
   const [entreprise, setEntreprise] = useState("");
@@ -164,7 +163,7 @@ export function TableauSites({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <Avancement site={s} postes={postes} corps={corps} />
+                  <Avancement site={s} libelles={libelleCorps} />
                 </td>
                 <td className="px-3 py-2">
                   <span className="whitespace-nowrap">
@@ -192,10 +191,15 @@ export function TableauSites({
  * Avancement du dernier rapport MOE, découpé par corps d'état (salle de classe
  * et latrines réunies, montants du DQE ; détail de chaque corps d'état au survol).
  */
-function Avancement({ site: s, postes, corps }: { site: LigneSite; postes: PosteDef[]; corps: CorpsEtat[] }) {
+function Avancement({ site: s, libelles }: { site: LigneSite; libelles: Map<string, string> }) {
   if (s.avancement === null)
     return <span className="whitespace-nowrap text-xs text-texte-3">Aucun rapport MOE</span>;
-  const segments = corpsEtatSites([{ electricite: s.electricite, type_latrines: s.type_latrines, postes: s.postes }], postes, corps);
+  const segments: SegmentCorpsEtat[] = s.parts.map(([code, montant, realise]) => ({
+    code,
+    libelle: libelles.get(code) ?? code,
+    montant,
+    realise,
+  }));
   return (
     <span className="block min-w-[11rem]">
       <BarreCorpsEtat segments={segments} hauteur="h-3" />

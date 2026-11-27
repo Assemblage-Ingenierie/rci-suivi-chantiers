@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/lib/database.types";
 import type { RoleUtilisateur } from "@/lib/constants";
@@ -8,20 +7,27 @@ import { ROLES_DEMANDABLES } from "@/lib/auth-roles";
 
 export type Profil = Tables<"chantierci_profiles">;
 
+/** Utilisateur connecté, lu dans son jeton vérifié (sans appel au serveur d'authentification). */
+export type UtilisateurConnecte = { id: string; email: string | null; user_metadata: Record<string, unknown> };
+
 /**
  * Utilisateur connecté + son profil (null si absent). Mis en cache pour la
  * durée d'une requête : le layout protégé et la page (exigerRole) partagent
  * ainsi un seul aller-retour vers Supabase au lieu de deux.
  */
 export const getUtilisateurEtProfil = cache(async function getUtilisateurEtProfil(): Promise<{
-  user: User | null;
+  user: UtilisateurConnecte | null;
   profil: Profil | null;
 }> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { user: null, profil: null };
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) return { user: null, profil: null };
+  const user: UtilisateurConnecte = {
+    id: claims.sub,
+    email: typeof claims.email === "string" ? claims.email : null,
+    user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown>,
+  };
 
   const { data: profil } = await supabase
     .from("chantierci_profiles")
@@ -38,7 +44,7 @@ export const getUtilisateurEtProfil = cache(async function getUtilisateurEtProfi
  * statut `en_attente`, aucun lot ni identifiant : l'admin valide ensuite.
  * (Les comptes CSTC sont créés par l'admin avec leur profil.)
  */
-export async function creerProfilSiAbsent(user: User): Promise<Profil | null> {
+export async function creerProfilSiAbsent(user: UtilisateurConnecte): Promise<Profil | null> {
   const supabase = createClient();
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
 

@@ -33,10 +33,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // IMPORTANT : ne rien insérer entre createServerClient et getUser().
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // IMPORTANT : ne rien insérer entre createServerClient et getClaims().
+  // getClaims() rafraîchit la session si besoin puis vérifie la signature du
+  // jeton localement (clés de signature asymétriques du projet) : pas d'appel
+  // au serveur d'authentification à chaque page, contrairement à getUser().
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   const cheminPublic = ROUTES_PUBLIQUES.some((p) =>
     request.nextUrl.pathname.startsWith(p)
