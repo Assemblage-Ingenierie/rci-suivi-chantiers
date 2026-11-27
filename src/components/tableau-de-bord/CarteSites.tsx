@@ -40,7 +40,7 @@ function popup(s: SiteTableau): string {
     <p style="margin:0;font-size:12px">Statut (MOE) : <strong>${statut}</strong></p>
     <p style="margin:0;font-size:12px">Avancement (MOE) : <strong>${pct(s.moe_avancement === null ? null : Number(s.moe_avancement))}</strong>
       · ${dateCourte(s.moe_date)}</p>
-    ${s.discordance ? `<p style="margin:2px 0 0;font-size:12px;color:#c2410c">Écart UG / MOE : ${Number(s.ecart_ug_moe) > 0 ? "+" : ""}${String(s.ecart_ug_moe).replace(".", ",")} pts</p>` : ""}
+    ${s.discordance ? `<p style="margin:2px 0 0;font-size:12px;color:rgb(var(--c-alerte))">Écart UG / MOE : ${Number(s.ecart_ug_moe) > 0 ? "+" : ""}${String(s.ecart_ug_moe).replace(".", ",")} pts</p>` : ""}
     ${position}
     <p style="margin:6px 0 0"><a href="/site/${encodeURIComponent(s.code)}" style="font-weight:600;font-size:12px">Voir la fiche du site →</a></p>
   </div>`;

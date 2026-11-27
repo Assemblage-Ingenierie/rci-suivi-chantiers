@@ -14,5 +14,10 @@ export const MARQUE = {
   titreNavigateur: "PATEB — Suivi des chantiers",
   description:
     "Suivi des travaux de construction des salles de classe du pré-primaire (PATEB, Côte d'Ivoire).",
-  logo: null as null | { src: string; largeur: number; hauteur: number; alt: string },
+  logo: {
+    src: "/logo-pateb.png",
+    largeur: 480,
+    hauteur: 374,
+    alt: "PATEB — Programme d'Appui à la Transformation de l'Éducation de Base",
+  } as null | { src: string; largeur: number; hauteur: number; alt: string },
 } as const;

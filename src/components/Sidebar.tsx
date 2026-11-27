@@ -25,17 +25,20 @@ export function Sidebar({
   return (
     <aside
       className={[
-        "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-accent text-sur-accent",
+        "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-menu text-white",
         "transition-transform duration-300",
         mobileOuverte ? "translate-x-0" : "-translate-x-full",
         "lg:static lg:translate-x-0",
       ].join(" ")}
     >
-      <div className="flex items-start justify-between px-5 py-6">
-        <Logo surAccent />
+      <div className="relative px-4 pb-5 pt-4">
+        {/* Logo PATEB sur fond blanc (couleurs du logo lisibles quelle que soit la couleur du profil). */}
+        <div className="flex justify-center rounded-carte bg-white px-3 py-2.5 shadow-sm">
+          <Logo largeur={168} />
+        </div>
         <button
           onClick={surFermetureMobile}
-          className="mt-1 rounded-champ p-1 opacity-70 hover:bg-black/10 hover:opacity-100 lg:hidden"
+          className="absolute right-1 top-1 rounded-champ p-1 opacity-70 hover:bg-black/10 hover:opacity-100 lg:hidden"
           aria-label="Fermer le menu"
         >
           <X className="h-5 w-5" />
@@ -51,8 +54,8 @@ export function Sidebar({
               href={href}
               onClick={surFermetureMobile}
               aria-current={actif ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-champ px-3 py-2.5 text-sm font-medium transition ${
-                actif ? "bg-black/20" : "opacity-75 hover:bg-black/10 hover:opacity-100"
+              className={`flex items-center gap-3 rounded-champ border-l-[3px] px-3 py-2.5 text-sm font-medium transition ${
+                actif ? "border-menu-actif bg-white/15" : "border-transparent opacity-80 hover:bg-white/10 hover:opacity-100"
               }`}
             >
               <Icone className="h-5 w-5" />
@@ -62,7 +65,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="flex items-center gap-2 border-t border-black/10 px-4 py-4">
+      <div className="flex items-center gap-2 border-t border-white/15 px-4 py-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{nomComplet}</p>
           <p className="truncate text-xs opacity-70">{LIBELLES_ROLES[role]}</p>
