@@ -48,5 +48,18 @@ export type ValeursPostes = { classe?: Record<string, number>; latrines?: Record
 /** Réponses libres du formulaire, indexées par identifiant de question. */
 export type Reponses = Record<string, Json>;
 
-export type PosteDef = { ouvrage: string; code: string; libelle: string; poids: number; ordre: number };
+/** Poste d'avancement : poids = montant au DQE (FCFA HT). */
+export type PosteDef = {
+  ouvrage: string;
+  code: string;
+  libelle: string;
+  poids: number;
+  /** Montant pour un site sans électricité, s'il diffère (sinon poids). */
+  poids_sans_electricite?: number | null;
+  /** Corps d'état (lot du DQE) du poste. */
+  corps_etat?: string | null;
+  ordre: number;
+};
+/** Corps d'état (lot du DQE) : regroupe les postes de la salle de classe et des latrines. */
+export type CorpsEtat = { code: string; libelle: string; ordre: number };
 export type Parametres = Record<string, number>;

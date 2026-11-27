@@ -9,7 +9,7 @@
 --     tant que la base ne contient que des données de test.
 --
 -- Tout s'exécute dans une transaction : en cas d'erreur, la base reste
--- inchangée. Contenu : 20261124100000_purge_v1.sql, 20261124100100_referentiel.sql, 20261124100200_fonctions.sql, 20261124100300_politiques_rls.sql, 20261124100400_donnees_referentiel.sql, 20261125100000_formulaires.sql, 20261126100000_tableau_de_bord.sql, 20261127100000_tableau_de_bord_v2.sql, 20261128100000_suivi_remplissage.sql, 20261129100000_suivi_attendu.sql.
+-- inchangée. Contenu : 20261124100000_purge_v1.sql, 20261124100100_referentiel.sql, 20261124100200_fonctions.sql, 20261124100300_politiques_rls.sql, 20261124100400_donnees_referentiel.sql, 20261125100000_formulaires.sql, 20261126100000_tableau_de_bord.sql, 20261127100000_tableau_de_bord_v2.sql, 20261128100000_suivi_remplissage.sql, 20261129100000_suivi_attendu.sql, 20261130100000_performances.sql, 20261201100000_entreprises_positions.sql, 20261202100000_dqe_alertes.sql.
 -- Comptes de test (optionnel, ensuite) : supabase/seed/comptes_test.sql
 -- ############################################################################
 
@@ -35,6 +35,7 @@ drop table if exists public.chantierci_affectations cascade;
 drop table if exists public.chantierci_sites cascade;
 drop table if exists public.chantierci_profiles cascade;
 drop table if exists public.chantierci_lots cascade;
+drop table if exists public.chantierci_entreprises cascade;
 drop table if exists public.chantierci_lots_moe cascade;
 drop type if exists public.chantierci_role;
 drop type if exists public.chantierci_type_latrines;
@@ -1995,5 +1996,1182 @@ comment on function public.chantierci_remplissage(integer) is
   'Formulaires reçus par site, type et semaine calendaire (N dernières semaines), statut déclaré par chaque acteur avant chaque semaine, et dernier formulaire de chaque type.';
 revoke all on function public.chantierci_remplissage(integer) from public, anon;
 grant execute on function public.chantierci_remplissage(integer) to authenticated;
+
+-- >>>>>>>>>>>>>>>>>>>> 20261130100000_performances.sql
+-- ============================================================================
+-- PERFORMANCES — tableau de bord, suivi et difficultés plus rapides
+--
+-- 1. Avancement enregistré dans chaque formulaire (colonne avancement) : il
+--    était recalculé à chaque affichage (≈ 20 000 calculs pour la courbe
+--    d'évolution, 3 par site pour la vue). Il est désormais calculé à
+--    l'enregistrement du formulaire, et recalculé si l'électricité ou le
+--    type de latrines du site change.
+-- 2. Vue chantierci_v_etat_sites : lit l'avancement enregistré (mêmes
+--    colonnes qu'avant).
+-- 3. chantierci_evolution_avancement : une seule passe sur les rapports MOE
+--    (chaque rapport est valable jusqu'au rapport suivant) au lieu d'une
+--    recherche par site et par semaine. Mêmes résultats.
+-- 4. chantierci_remplissage : statut déclaré avant chaque semaine obtenu de
+--    la même façon, sans sous-requête par site, semaine et acteur. Mêmes
+--    résultats.
+--
+-- À exécuter APRÈS 20261129100000_suivi_attendu.sql. Rejouable.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 1. Avancement enregistré
+-- ----------------------------------------------------------------------------
+alter table public.chantierci_visites add column if not exists avancement numeric;
+comment on column public.chantierci_visites.avancement is
+  'Avancement (%) calculé à partir des postes et du site (MOE, UG) ; tenu à jour par la base, ne pas saisir.';
+
+-- Calcul à chaque enregistrement : la valeur envoyée par le client est ignorée.
+create or replace function chantierci_private.visites_calcul_avancement()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.source in ('moe', 'ug') then
+    select chantierci_private.avancement_site(new.postes, s.electricite, s.type_latrines)
+      into new.avancement
+    from public.chantierci_sites s where s.id = new.site_id;
+  else
+    new.avancement := null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function chantierci_private.visites_calcul_avancement() from public;
+
+drop trigger if exists chantierci_visites_calcul_avancement on public.chantierci_visites;
+create trigger chantierci_visites_calcul_avancement
+  before insert or update on public.chantierci_visites
+  for each row execute function chantierci_private.visites_calcul_avancement();
+
+-- Un recalcul de l'avancement seul n'est pas une modification du formulaire :
+-- ni date de modification, ni « modifié par » (même fonction qu'avant sinon).
+create or replace function chantierci_private.visites_avant_modification()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if (to_jsonb(new) - 'avancement') = (to_jsonb(old) - 'avancement') then
+    return new;
+  end if;
+  if (select auth.uid()) is not null then
+    if chantierci_private.user_role() <> 'admin' and (
+         new.site_id is distinct from old.site_id
+      or new.source is distinct from old.source
+      or new.auteur_id is distinct from old.auteur_id
+      or new.donnees_test is distinct from old.donnees_test) then
+      raise exception 'Le site, le type de formulaire et l''auteur d''une visite ne peuvent pas être modifiés';
+    end if;
+    new.created_at := old.created_at;
+    new.modifie_par := (select auth.uid());
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Recalcul des formulaires d'un site quand ses caractéristiques changent.
+create or replace function chantierci_private.sites_recalcul_avancement()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  update public.chantierci_visites v
+  set avancement = chantierci_private.avancement_site(v.postes, new.electricite, new.type_latrines)
+  where v.site_id = new.id and v.source in ('moe', 'ug');
+  return null;
+end;
+$$;
+revoke all on function chantierci_private.sites_recalcul_avancement() from public;
+
+drop trigger if exists chantierci_sites_recalcul_avancement on public.chantierci_sites;
+create trigger chantierci_sites_recalcul_avancement
+  after update of electricite, type_latrines on public.chantierci_sites
+  for each row
+  when (old.electricite is distinct from new.electricite or old.type_latrines is distinct from new.type_latrines)
+  execute function chantierci_private.sites_recalcul_avancement();
+
+-- Formulaires existants.
+update public.chantierci_visites v
+set avancement = case when v.source in ('moe', 'ug')
+                      then chantierci_private.avancement_site(v.postes, s.electricite, s.type_latrines) end
+from public.chantierci_sites s
+where s.id = v.site_id
+  and v.avancement is distinct from case when v.source in ('moe', 'ug')
+                      then chantierci_private.avancement_site(v.postes, s.electricite, s.type_latrines) end;
+
+-- ----------------------------------------------------------------------------
+-- 2. Vue : état de chaque site (avancement enregistré)
+-- ----------------------------------------------------------------------------
+create or replace view public.chantierci_v_etat_sites
+with (security_invoker = true) as
+with params as (
+  select
+    coalesce(max(valeur) filter (where cle = 'fenetre_comparaison_jours'), 7)::int as fenetre,
+    coalesce(max(valeur) filter (where cle = 'seuil_ecart_ug_moe'), 5) as seuil
+  from public.chantierci_parametres
+)
+select
+  s.id,
+  s.code,
+  s.nom,
+  s.lot_id,
+  s.lot_moe_id,
+  s.region,
+  s.departement,
+  s.localite,
+  s.electricite,
+  s.type_latrines,
+  -- Position : coordonnées du site, sinon moyenne des photos géolocalisées,
+  -- sinon chef-lieu du département (décalé de quelques km pour ne pas
+  -- superposer les sites).
+  coalesce(s.latitude, gps.latitude,
+    d.latitude + ((('x' || substr(md5(s.code), 1, 4))::bit(16)::int) / 65535.0 - 0.5) * 0.16) as latitude,
+  coalesce(s.longitude, gps.longitude,
+    d.longitude + ((('x' || substr(md5(s.code), 5, 4))::bit(16)::int) / 65535.0 - 0.5) * 0.16) as longitude,
+  case
+    when s.latitude is not null and s.longitude is not null then 'site'
+    when gps.latitude is not null then 'photos'
+    when d.nom is not null then 'departement'
+  end as origine_position,
+  moe.date_visite as moe_date,
+  moe.statut as moe_statut,
+  moe.postes as moe_postes,
+  moe.avancement as moe_avancement,
+  (select count(*) from public.chantierci_visites v where v.site_id = s.id and v.source = 'moe')::int as moe_nb,
+  ug.date_visite as ug_date,
+  ug.statut as ug_statut,
+  ug.avancement as ug_avancement,
+  ref.date_visite as ug_date_moe_comparee,
+  ref.avancement as ug_avancement_moe_compare,
+  round(ug.avancement - ref.avancement, 1) as ecart_ug_moe,
+  coalesce(abs(ug.avancement - ref.avancement) > p.seuil, false) as discordance,
+  cstc.date_visite as cstc_date,
+  cstc.statut as cstc_statut,
+  -- Détail des dernières visites (onglet Difficultés)
+  moe.reponses as moe_reponses,
+  moe.commentaire as moe_commentaire,
+  case when moe.statut = 'arrete' then arret.depuis end as moe_arrete_depuis,
+  ug.reponses as ug_reponses,
+  ug.commentaire as ug_commentaire,
+  cstc.reponses as cstc_reponses,
+  cstc.commentaire as cstc_commentaire
+from public.chantierci_sites s
+cross join params p
+left join public.chantierci_departements d on d.nom = s.departement
+left join lateral (
+  select v.date_visite, v.statut, v.postes, v.reponses, v.commentaire, v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) moe on true
+left join lateral (
+  select v.date_visite, v.statut, v.reponses, v.commentaire,
+         v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'ug'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) ug on true
+left join lateral (
+  select v.date_visite,
+         v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe'
+    and ug.date_visite is not null
+    and abs(v.date_visite - ug.date_visite) <= p.fenetre
+  order by abs(v.date_visite - ug.date_visite), v.date_visite desc, v.created_at desc
+  limit 1
+) ref on true
+left join lateral (
+  select v.date_visite, v.statut, v.reponses, v.commentaire
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'cstc'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) cstc on true
+-- Début de l'arrêt en cours : premier rapport « arrêté » après le dernier rapport d'un autre statut.
+left join lateral (
+  select min(v.date_visite) as depuis
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe' and v.statut = 'arrete'
+    and v.date_visite > coalesce(
+      (select max(w.date_visite) from public.chantierci_visites w
+       where w.site_id = s.id and w.source = 'moe' and w.statut <> 'arrete'),
+      '-infinity'::date)
+) arret on true
+left join lateral (
+  select avg(ph.latitude) as latitude, avg(ph.longitude) as longitude
+  from public.chantierci_photos ph
+  join public.chantierci_visites v on v.id = ph.visite_id
+  where v.site_id = s.id and ph.latitude is not null and ph.longitude is not null
+) gps on true
+where s.actif;
+
+comment on view public.chantierci_v_etat_sites is
+  'Une ligne par site actif : dernier rapport MOE (référence), dernière fiche UG et écart avec la visite MOE la plus proche, dernier signalement CSTC, position.';
+grant select on public.chantierci_v_etat_sites to authenticated;
+revoke all on public.chantierci_v_etat_sites from anon;
+
+-- ----------------------------------------------------------------------------
+-- 3. Évolution de l'avancement global, semaine par semaine
+--    À chaque date, chaque site vaut l'avancement de son dernier rapport MOE
+--    (0 % sans rapport) ; lot = moyenne de ses sites ; global = pondéré par
+--    le poids des lots.
+-- ----------------------------------------------------------------------------
+create or replace function public.chantierci_evolution_avancement(p_lot_moe integer default null)
+returns table (date_ref date, avancement numeric)
+language sql stable set search_path = ''
+as $$
+  with bornes as (
+    select min(v.date_visite) as debut from public.chantierci_visites v where v.source = 'moe'
+  ),
+  dates as (
+    select (current_date - 7 * n)::date as date_ref
+    from bornes, generate_series(0, least(52, greatest(0, (current_date - bornes.debut) / 7 + 1))) as n
+    where bornes.debut is not null
+  ),
+  sites as (
+    select s.id, s.lot_id
+    from public.chantierci_sites s
+    where s.actif and (p_lot_moe is null or s.lot_moe_id = p_lot_moe)
+  ),
+  -- Chaque rapport MOE est valable de sa date jusqu'au rapport suivant du site.
+  rapports as (
+    select v.site_id, st.lot_id, v.date_visite, coalesce(v.avancement, 0) as av,
+           lead(v.date_visite) over (partition by v.site_id order by v.date_visite, v.created_at) as suivant
+    from public.chantierci_visites v
+    join sites st on st.id = v.site_id
+    where v.source = 'moe'
+  ),
+  sommes as (
+    select d.date_ref, r.lot_id, sum(r.av) as total
+    from dates d
+    join rapports r on r.date_visite <= d.date_ref and (r.suivant is null or r.suivant > d.date_ref)
+    group by d.date_ref, r.lot_id
+  ),
+  lots as (
+    select st.lot_id, count(*) as nb_sites from sites st group by st.lot_id
+  )
+  select d.date_ref,
+         round(sum(coalesce(so.total, 0) / l.nb_sites * lo.poids) / nullif(sum(lo.poids), 0), 1)
+  from dates d
+  cross join lots l
+  join public.chantierci_lots lo on lo.id = l.lot_id
+  left join sommes so on so.date_ref = d.date_ref and so.lot_id = l.lot_id
+  group by d.date_ref
+  order by d.date_ref;
+$$;
+revoke all on function public.chantierci_evolution_avancement(integer) from public, anon;
+grant execute on function public.chantierci_evolution_avancement(integer) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 4. Remplissage des formulaires (même résultat que 20261129100000)
+-- ----------------------------------------------------------------------------
+create or replace function public.chantierci_remplissage(p_semaines integer default 8)
+returns table (
+  site_id uuid,
+  date_ref date,          -- lundi de la semaine en cours
+  moe integer[],
+  cstc integer[],
+  ug integer[],
+  moe_dernier date,
+  cstc_dernier date,
+  ug_dernier date,
+  moe_statuts text[],
+  cstc_statuts text[],
+  ug_statuts text[],
+  moe_dernier_statut text,
+  cstc_dernier_statut text,
+  ug_dernier_statut text
+)
+language sql stable set search_path = ''
+as $$
+  with n as (
+    select least(greatest(coalesce(p_semaines, 8), 1), 26) as nb,
+           date_trunc('week', current_date)::date as lundi
+  ),
+  semaines as (
+    select k, (select lundi from n) - 7 * k as lundi
+    from generate_series(0, (select nb from n) - 1) as k        -- 0 = semaine en cours
+  ),
+  sources as (
+    select unnest(array['moe', 'cstc', 'ug']::public.chantierci_source_formulaire[]) as source
+  ),
+  sites as (
+    select s.id from public.chantierci_sites s where s.actif
+  ),
+  -- Formulaires de chaque acteur, avec la date de son formulaire suivant.
+  historique as (
+    select v.site_id, v.source, v.date_visite, v.statut::text as statut,
+           lead(v.date_visite) over (partition by v.site_id, v.source order by v.date_visite, v.created_at) as suivant,
+           row_number() over (partition by v.site_id, v.source order by v.date_visite desc, v.created_at desc) as rang
+    from public.chantierci_visites v
+  ),
+  -- Statut déclaré dans le dernier formulaire reçu avant le lundi de chaque semaine.
+  avant as (
+    select h.site_id, h.source, w.k, h.statut
+    from semaines w
+    join historique h on h.date_visite < w.lundi and (h.suivant is null or h.suivant >= w.lundi)
+  ),
+  comptes as (
+    select v.site_id, v.source,
+           ((select lundi from n) - date_trunc('week', v.date_visite)::date) / 7 as k,
+           count(*)::int as nb
+    from public.chantierci_visites v
+    where v.date_visite >= (select lundi from n) - 7 * ((select nb from n) - 1)
+      and v.date_visite < (select lundi from n) + 7
+    group by 1, 2, 3
+  ),
+  grille as (
+    select s.id as site_id, src.source, w.k, coalesce(c.nb, 0) as nb, a.statut as statut_avant
+    from sites s
+    cross join semaines w
+    cross join sources src
+    left join comptes c on c.site_id = s.id and c.source = src.source and c.k = w.k
+    left join avant a on a.site_id = s.id and a.source = src.source and a.k = w.k
+  ),
+  derniers as (
+    select h.site_id, h.source, h.date_visite, h.statut from historique h where h.rang = 1
+  )
+  select
+    g.site_id,
+    (select lundi from n),
+    array_agg(g.nb order by g.k desc) filter (where g.source = 'moe'),
+    array_agg(g.nb order by g.k desc) filter (where g.source = 'cstc'),
+    array_agg(g.nb order by g.k desc) filter (where g.source = 'ug'),
+    max(d.date_visite) filter (where d.source = 'moe'),
+    max(d.date_visite) filter (where d.source = 'cstc'),
+    max(d.date_visite) filter (where d.source = 'ug'),
+    array_agg(g.statut_avant order by g.k desc) filter (where g.source = 'moe'),
+    array_agg(g.statut_avant order by g.k desc) filter (where g.source = 'cstc'),
+    array_agg(g.statut_avant order by g.k desc) filter (where g.source = 'ug'),
+    max(d.statut) filter (where d.source = 'moe'),
+    max(d.statut) filter (where d.source = 'cstc'),
+    max(d.statut) filter (where d.source = 'ug')
+  from grille g
+  left join derniers d on d.site_id = g.site_id and d.source = g.source
+  group by g.site_id;
+$$;
+comment on function public.chantierci_remplissage(integer) is
+  'Formulaires reçus par site, type et semaine calendaire (N dernières semaines), statut déclaré par chaque acteur avant chaque semaine, et dernier formulaire de chaque type.';
+revoke all on function public.chantierci_remplissage(integer) from public, anon;
+grant execute on function public.chantierci_remplissage(integer) to authenticated;
+
+-- >>>>>>>>>>>>>>>>>>>> 20261201100000_entreprises_positions.sql
+-- ============================================================================
+-- ENTREPRISES ET POSITIONS DES SITES
+--
+-- 1. Entreprises titulaires : table chantierci_entreprises ; chaque lot de
+--    travaux pointe vers son entreprise (une entreprise peut avoir plusieurs
+--    lots). Noms provisoires « Entreprise 1 » … « Entreprise 33 » (une par
+--    lot) en attendant les vrais noms. Remplace la colonne texte
+--    chantierci_lots.entreprise_titulaire.
+-- 2. Coordonnées GPS des sites, d'après la cartographie PATEB v4 (calque
+--    « ACCES - CONSTRUCTIONS PRE PRIMAIRE », 15/10/2026) : 375 sites sur 387
+--    retrouvés par leur nom. Les autres gardent la position approchée (chef-lieu
+--    du département). Une position déjà renseignée n'est pas remplacée.
+--
+-- À exécuter APRÈS 20261130100000_performances.sql. Rejouable.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 1. Entreprises
+-- ----------------------------------------------------------------------------
+create table if not exists public.chantierci_entreprises (
+  id smallint generated by default as identity primary key,
+  nom text not null unique,
+  constraint chantierci_entreprises_nom_non_vide check (btrim(nom) <> '')
+);
+comment on table public.chantierci_entreprises is 'Entreprises titulaires des lots de travaux (une entreprise peut avoir plusieurs lots).';
+
+alter table public.chantierci_entreprises enable row level security;
+drop policy if exists "chantierci_entreprises_select" on public.chantierci_entreprises;
+create policy "chantierci_entreprises_select" on public.chantierci_entreprises
+  for select to authenticated
+  using ((select chantierci_private.user_role()) is not null);
+drop policy if exists "chantierci_entreprises_ecriture_admin" on public.chantierci_entreprises;
+create policy "chantierci_entreprises_ecriture_admin" on public.chantierci_entreprises
+  for all to authenticated
+  using ((select chantierci_private.user_role()) = 'admin')
+  with check ((select chantierci_private.user_role()) = 'admin');
+grant select, insert, update, delete on public.chantierci_entreprises to authenticated;
+revoke all on public.chantierci_entreprises from anon;
+
+alter table public.chantierci_lots
+  add column if not exists entreprise_id smallint references public.chantierci_entreprises (id) on delete set null;
+create index if not exists idx_chantierci_lots_entreprise on public.chantierci_lots (entreprise_id);
+
+-- Noms déjà saisis dans l'ancienne colonne texte, sinon « Entreprise <n° du lot> ».
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'chantierci_lots' and column_name = 'entreprise_titulaire') then
+    insert into public.chantierci_entreprises (nom)
+    select distinct btrim(entreprise_titulaire) from public.chantierci_lots
+    where btrim(entreprise_titulaire) <> ''
+    on conflict (nom) do nothing;
+    update public.chantierci_lots l set entreprise_id = e.id
+    from public.chantierci_entreprises e
+    where l.entreprise_id is null and e.nom = btrim(l.entreprise_titulaire);
+    alter table public.chantierci_lots drop column entreprise_titulaire;
+  end if;
+end;
+$$;
+
+insert into public.chantierci_entreprises (nom)
+select 'Entreprise ' || l.id from public.chantierci_lots l where l.entreprise_id is null
+on conflict (nom) do nothing;
+update public.chantierci_lots l set entreprise_id = e.id
+from public.chantierci_entreprises e
+where l.entreprise_id is null and e.nom = 'Entreprise ' || l.id;
+
+-- ----------------------------------------------------------------------------
+-- 2. Positions GPS (cartographie PATEB v4)
+-- ----------------------------------------------------------------------------
+update public.chantierci_sites s
+set latitude = p.latitude, longitude = p.longitude
+from (values
+  ('L01-01', 9.477183, -3.172831),
+  ('L01-03', 9.85278, -3.39253),
+  ('L01-04', 9.798463, -3.394673),
+  ('L01-05', 9.603336, -3.656201),
+  ('L01-06', 9.60311, -3.656622),
+  ('L01-07', 9.608869, -3.668885),
+  ('L02-01', 9.277907, -3.002141),
+  ('L02-02', 9.276757, -3.002333),
+  ('L02-03', 9.277221, -3.002661),
+  ('L02-04', 9.265144, -2.995454),
+  ('L02-05', 9.265161, -2.995451),
+  ('L02-06', 9.282317, -3.009153),
+  ('L02-07', 8.442957, -3.402832),
+  ('L02-08', 8.460457, -3.532769),
+  ('L02-09', 8.676706, -3.191367),
+  ('L02-10', 9.033526, -3.112805),
+  ('L02-11', 9.035412, -2.906725),
+  ('L03-01', 8.071558, -3.084818),
+  ('L03-02', 8.233702, -2.568852),
+  ('L03-03', 7.989554, -2.740256),
+  ('L03-04', 8.047963, -2.621781),
+  ('L03-05', 8.000939, -2.883125),
+  ('L03-06', 8.16042, -2.933495),
+  ('L03-07', 7.764139, -3.11718),
+  ('L03-08', 7.85181, -2.953776),
+  ('L03-09', 7.879057, -3.011423),
+  ('L03-10', 7.886746, -3.119742),
+  ('L03-11', 7.780958, -3.203188),
+  ('L04-01', 7.62818, -3.357355),
+  ('L04-02', 7.63668, -3.37151),
+  ('L04-03', 7.585232, -3.301473),
+  ('L04-04', 7.897705, -3.718749),
+  ('L04-05', 7.46389, -3.336142),
+  ('L04-06', 7.437502, -3.421491),
+  ('L04-07', 7.553241, -3.357742),
+  ('L04-08', 7.588248, -3.235265),
+  ('L04-09', 7.174043, -3.13484),
+  ('L04-10', 7.297623, -3.216878),
+  ('L04-11', 7.37377, -3.293818),
+  ('L04-12', 7.707446, -3.100896),
+  ('L04-13', 7.825794, -2.926609),
+  ('L04-14', 7.601822, -3.151818),
+  ('L04-15', 7.575065, -3.114933),
+  ('L04-16', 7.369731, -3.064716),
+  ('L05-01', 8.138303, -4.97485),
+  ('L05-02', 8.120871, -4.935995),
+  ('L05-03', 8.147637, -5.108407),
+  ('L05-04', 8.173882, -5.100685),
+  ('L05-05', 8.150155, -5.023346),
+  ('L05-06', 8.057982, -5.227462),
+  ('L05-07', 8.13905, -5.09447),
+  ('L05-08', 9.363273, -5.303591),
+  ('L05-09', 9.311503, -5.306534),
+  ('L05-10', 9.58431, -5.209695),
+  ('L05-11', 9.108157, -5.251156),
+  ('L05-12', 8.5754, -5.207088),
+  ('L06-01', 8.100869, -4.115593),
+  ('L06-02', 7.892693, -4.533004),
+  ('L06-05', 8.687247, -4.677616),
+  ('L06-06', 8.619883, -4.694919),
+  ('L06-07', 8.385276, -4.725792),
+  ('L06-08', 8.43759, -4.57254),
+  ('L06-11', 8.456644, -4.666382),
+  ('L06-12', 8.455785, -4.686555),
+  ('L06-13', 8.456209, -4.68564),
+  ('L07-01', 8.669874, -5.28671),
+  ('L07-02', 8.669921, -5.286687),
+  ('L07-03', 8.655931, -5.290479),
+  ('L07-04', 8.655948, -5.290475),
+  ('L07-05', 8.650817, -5.299393),
+  ('L07-06', 8.359802, -4.43233),
+  ('L07-07', 8.359392, -4.432341),
+  ('L07-09', 8.650447, -5.284729),
+  ('L07-10', 8.295383, -4.620051),
+  ('L07-11', 8.519053, -5.174614),
+  ('L07-12', 8.765779, -5.589435),
+  ('L08-01', 8.138937, -5.097852),
+  ('L08-02', 8.139375, -5.097855),
+  ('L08-03', 8.129434, -5.098682),
+  ('L08-04', 8.15379, -5.8916),
+  ('L08-05', 8.14134, -5.08566),
+  ('L08-06', 8.213371, -5.137351),
+  ('L08-07', 9.052975, -5.175957),
+  ('L08-08', 9.071818, -5.164523),
+  ('L08-09', 9.072035, -5.164437),
+  ('L08-10', 9.072135, -5.164509),
+  ('L08-11', 8.823222, -5.198707),
+  ('L08-12', 8.933944, -5.178435),
+  ('L08-13', 8.662494, -5.277337),
+  ('L08-15', 8.765324, -5.684324),
+  ('L09-01', 9.578787, -5.180695),
+  ('L09-02', 9.586193, -5.223213),
+  ('L09-03', 9.438112, -5.276915),
+  ('L09-04', 9.545837, -5.253492),
+  ('L09-05', 9.501282, -5.2782),
+  ('L09-06', 9.504808, -5.274238),
+  ('L09-07', 9.504337, -5.275642),
+  ('L09-08', 9.545543, -5.252632),
+  ('L09-09', 10.10864, -5.470935),
+  ('L09-10', 10.10887, -5.470537),
+  ('L09-11', 10.205092, -5.623589),
+  ('L09-12', 10.205063, -5.624537),
+  ('L10-01', 9.590312, -5.170097),
+  ('L10-02', 9.594379, -5.212334),
+  ('L10-03', 9.436527, -5.1403),
+  ('L10-04', 9.460902, -4.912593),
+  ('L10-05', 9.59819, -5.196405),
+  ('L10-06', 9.59773, -5.196642),
+  ('L10-07', 9.598593, -5.196795),
+  ('L10-08', 9.738907, -5.159973),
+  ('L10-09', 9.841824, -5.160468),
+  ('L10-10', 9.640353, -5.31502),
+  ('L10-11', 9.595422, -5.212527),
+  ('L11-01', 9.12045, -4.493456),
+  ('L11-02', 9.192188, -4.786801),
+  ('L11-03', 9.5829, -4.319508),
+  ('L11-04', 9.430162, -4.62767),
+  ('L11-05', 9.275871, -4.532392),
+  ('L11-06', 9.15996, -4.598723),
+  ('L11-07', 9.149454, -4.610983),
+  ('L11-08', 9.15115, -4.613241),
+  ('L12-01', 10.050187, -5.322114),
+  ('L12-02', 10.056387, -5.319828),
+  ('L12-03', 10.052177, -5.258202),
+  ('L12-04', 10.092619, -5.191919),
+  ('L12-05', 9.980382, -5.166849),
+  ('L12-06', 9.999393, -5.164762),
+  ('L12-07', 9.977892, -5.152119),
+  ('L12-08', 9.978845, -5.138163),
+  ('L12-09', 9.965556, -5.154842),
+  ('L13-01', 9.31881, -7.631587),
+  ('L13-02', 9.027886, -7.585847),
+  ('L13-03', 9.141898, -7.694191),
+  ('L13-04', 9.526412, -7.792083),
+  ('L13-05', 9.833786, -7.389769),
+  ('L13-07', 10.22493, -7.484492),
+  ('L13-08', 10.11982, -7.396175),
+  ('L14-01', 9.823865, -6.221767),
+  ('L14-02', 9.458873, -6.4013),
+  ('L14-03', 9.151864, -6.438215),
+  ('L14-05', 9.88841, -6.596143),
+  ('L14-06', 10.085018, -6.662393),
+  ('L14-07', 9.780072, -6.292732),
+  ('L14-08', 9.736882, -6.392322),
+  ('L14-09', 9.650425, -6.4925),
+  ('L14-10', 10.125432, -6.579986),
+  ('L15-01', 10.387478, -6.436387),
+  ('L15-02', 10.16446, -6.307803),
+  ('L15-03', 10.081002, -6.332022),
+  ('L15-04', 10.006084, -6.474727),
+  ('L15-05', 10.012704, -6.478355),
+  ('L15-06', 10.104969, -6.424573),
+  ('L15-07', 10.048651, -6.365584),
+  ('L15-08', 10.130113, -6.374862),
+  ('L16-01', 8.473732, -7.19653),
+  ('L16-02', 8.474872, -7.190634),
+  ('L16-03', 8.192935, -7.85458),
+  ('L16-04', 8.15767, -7.118808),
+  ('L16-05', 8.250133, -7.163522),
+  ('L16-06', 8.345723, -7.913408),
+  ('L16-07', 8.685409, -7.672227),
+  ('L16-08', 8.05741, -6.18229),
+  ('L16-09', 7.973482, -6.151785),
+  ('L16-10', 8.057406, -6.182257),
+  ('L16-11', 7.845992, -5.93575),
+  ('L16-12', 8.031669, -6.087206),
+  ('L16-13', 8.031632, -6.087217),
+  ('L16-14', 7.883634, -5.967456),
+  ('L17-01', 8.304557, -5.727625),
+  ('L17-02', 8.262717, -5.821865),
+  ('L17-03', 8.251581, -5.909775),
+  ('L17-04', 8.15402, -5.906215),
+  ('L17-05', 8.179833, -5.806342),
+  ('L17-06', 8.918277, -6.470902),
+  ('L17-07', 9.120453, -6.363879),
+  ('L17-08', 8.660427, -6.155083),
+  ('L17-09', 8.62598, -6.132244),
+  ('L17-10', 8.826031, -6.270444),
+  ('L17-11', 8.454159, -5.785564),
+  ('L18-01', 8.697196, -6.619575),
+  ('L18-02', 8.886344, -6.746256),
+  ('L18-03', 8.474339, -6.604415),
+  ('L18-04', 8.539546, -6.690199),
+  ('L18-05', 8.47388, -6.604626),
+  ('L18-06', 8.356392, -6.579453),
+  ('L18-07', 8.478126, -6.608791),
+  ('L18-08', 8.478332, -6.609266),
+  ('L18-09', 8.478925, -6.60904),
+  ('L18-10', 8.508224, -6.939523),
+  ('L18-11', 8.530763, -6.937913),
+  ('L18-12', 8.507845, -6.939439),
+  ('L18-13', 8.058488, -6.762106),
+  ('L18-14', 8.140894, -6.84275),
+  ('L18-15', 8.334237, -6.88937),
+  ('L18-16', 8.485153, -6.828405),
+  ('L19-01', 7.957878, -6.661607),
+  ('L19-02', 7.979465, -6.678888),
+  ('L19-03', 8.110607, -6.47236),
+  ('L19-04', 7.965412, -6.66547),
+  ('L19-05', 7.962511, -6.666318),
+  ('L19-06', 7.8, -6.366709),
+  ('L19-07', 7.817053, -6.451078),
+  ('L19-08', 7.814602, -6.465927),
+  ('L19-09', 8.052219, -6.560884),
+  ('L19-10', 7.82854, -7.021385),
+  ('L19-11', 7.95623, -6.874733),
+  ('L19-12', 7.572301012, -6.522542908),
+  ('L19-13', 7.987724, -6.891186),
+  ('L19-14', 7.882858, -7.011803),
+  ('L19-15', 7.935257, -6.971197),
+  ('L19-16', 7.999178, -6.873366),
+  ('L20-01', 6.718558, -3.512477),
+  ('L20-02', 6.719252, -3.512453),
+  ('L20-03', 6.726927, -3.485367),
+  ('L20-05', 6.809161, -3.514403),
+  ('L20-06', 6.733827, -3.489765),
+  ('L20-07', 6.733838, -3.488186),
+  ('L20-08', 6.736471, -3.483392),
+  ('L21-02', 6.324582, -3.443499),
+  ('L21-03', 6.325237, -3.44447),
+  ('L21-04', 6.30305, -3.469298),
+  ('L21-05', 6.364652, -3.412172),
+  ('L21-06', 6.48063, -3.34366),
+  ('L21-07', 6.45732, -3.386547),
+  ('L21-08', 6.383035, -3.351632),
+  ('L21-09', 6.433492, -3.368518),
+  ('L21-10', 6.457422, -3.385768),
+  ('L22-01', 7.059537, -3.227607),
+  ('L22-02', 7.2378, -3.31733),
+  ('L22-03', 7.234043, -3.314317),
+  ('L22-04', 7.064638, -3.150033),
+  ('L22-05', 7.133822, -3.214963),
+  ('L22-06', 7.069965, -3.128303),
+  ('L22-07', 7.13784, -3.203122),
+  ('L22-08', 7.138432, -3.194893),
+  ('L22-09', 7.138432, -3.194893),
+  ('L22-10', 7.138593, -3.203193),
+  ('L22-11', 7.137951, -3.203351),
+  ('L22-12', 7.134737, -3.20922),
+  ('L22-13', 7.13513, -3.209688),
+  ('L22-14', 7.120373, -3.199732),
+  ('L23-01', 6.823774, -3.569409),
+  ('L23-02', 6.620278, -3.292366),
+  ('L23-03', 6.896882, -3.612807),
+  ('L23-04', 6.645127, -3.379365),
+  ('L23-05', 6.828268, -3.745106),
+  ('L23-06', 6.652746, -3.683119),
+  ('L23-07', 6.653937, -3.678616),
+  ('L23-08', 6.469925, -3.638114),
+  ('L23-09', 6.578923, -3.628175),
+  ('L23-10', 6.579663, -3.628322),
+  ('L23-11', 6.617045, -3.632175),
+  ('L24-02', 6.856662, -3.49135),
+  ('L24-03', 6.823865, -3.415568),
+  ('L24-04', 7.027705, -3.382829),
+  ('L24-05', 7.005078, -3.362793),
+  ('L24-06', 6.886426, -3.457394),
+  ('L24-07', 6.953097, -3.407342),
+  ('L24-08', 6.835633, -3.280675),
+  ('L24-09', 7.03434, -3.380165),
+  ('L24-10', 7.122102, -3.342053),
+  ('L24-11', 6.966255, -3.232193),
+  ('L24-12', 6.967301, -3.23393),
+  ('L24-13', 7.164975, -3.30765),
+  ('L24-14', 7.159551, -3.305284),
+  ('L25-01', 5.71805, -6.81159),
+  ('L25-02', 5.655962, -6.767696),
+  ('L25-03', 5.649195, -6.823832),
+  ('L25-04', 5.818051, -6.718089),
+  ('L25-05', 5.787325, -6.765596),
+  ('L25-06', 5.540051, -6.58793),
+  ('L25-07', 5.655357, -6.66199),
+  ('L25-08', 5.505021, -6.640245),
+  ('L25-09', 5.604327, -6.647262),
+  ('L25-10', 5.6584, -6.613957),
+  ('L25-11', 5.635015, -6.550203),
+  ('L26-01', 5.916148, -6.486741),
+  ('L26-02', 5.874187, -6.403155),
+  ('L26-03', 5.966697, -6.34178),
+  ('L26-04', 5.934907, -6.343051),
+  ('L26-05', 5.887491, -6.377008),
+  ('L26-06', 5.96631, -6.488511),
+  ('L26-07', 5.966938, -6.488617),
+  ('L26-08', 5.965156, -6.516962),
+  ('L26-09', 5.963112, -6.515937),
+  ('L26-10', 6.04483, -6.486373),
+  ('L26-11', 6.274776, -6.561093),
+  ('L26-12', 5.93771, -6.597925),
+  ('L26-13', 5.900385, -6.592947),
+  ('L27-01', 5.702104, -6.437525),
+  ('L27-02', 5.730836, -6.316633),
+  ('L27-03', 5.628479, -6.446249),
+  ('L27-04', 5.797476, -6.486284),
+  ('L27-05', 5.723248, -6.273503),
+  ('L27-06', 5.816068, -6.387687),
+  ('L27-07', 5.672808, -6.051978),
+  ('L27-08', 5.668605, -6.087692),
+  ('L27-09', 5.669728, -6.12168),
+  ('L27-10', 5.4285, -6.02438),
+  ('L27-11', 5.543532, -6.041337),
+  ('L28-01', 5.358723, -6.644954),
+  ('L28-02', 5.351902, -6.58987),
+  ('L28-03', 5.323173, -6.525005),
+  ('L28-04', 5.517398, -6.580208),
+  ('L28-05', 5.517598, -6.579945),
+  ('L28-06', 5.499279, -6.513575),
+  ('L28-07', 5.424352, -6.417964),
+  ('L28-08', 6.132607, -6.827623),
+  ('L28-09', 6.231943, -6.962253),
+  ('L28-10', 6.351284, -6.918409),
+  ('L28-11', 6.132681, -6.993321),
+  ('L28-12', 6.127717, -7.133435),
+  ('L28-13', 6.220141, -6.954601),
+  ('L29-01', 5.942953, -7.475778),
+  ('L29-02', 5.627112, -7.360771),
+  ('L29-03', 6.228206, -7.557022),
+  ('L29-04', 6.396891, -8.373168),
+  ('L29-05', 6.531921, -8.339117),
+  ('L29-06', 6.592134, -8.246445),
+  ('L29-07', 6.57609, -8.339205),
+  ('L29-08', 6.521772, -8.294941),
+  ('L29-09', 6.585519, -8.374278),
+  ('L29-10', 6.621005, -8.456444),
+  ('L29-11', 6.567013, -8.426614),
+  ('L29-12', 6.597381, -8.473977),
+  ('L30-01', 6.695431, -7.462044),
+  ('L30-02', 6.376945, -7.394743),
+  ('L30-03', 6.545298, -7.563425),
+  ('L30-04', 6.546426, -7.634028),
+  ('L30-05', 6.55971, -7.693331),
+  ('L30-06', 6.561978, -7.435382),
+  ('L30-07', 6.562197, -7.434807),
+  ('L30-08', 6.312777, -7.419514),
+  ('L30-09', 6.566188, -7.745976),
+  ('L30-10', 6.567907, -7.720975),
+  ('L30-11', 6.650225, -7.762762),
+  ('L30-12', 6.64678, -7.733442),
+  ('L30-13', 6.559611, -7.447941),
+  ('L30-14', 6.352332, -7.528065),
+  ('L31-01', 6.56317, -7.778463),
+  ('L31-02', 6.543585, -7.598133),
+  ('L31-03', 6.513685, -7.523092),
+  ('L31-04', 6.365552, -7.528985),
+  ('L31-05', 6.46207, -7.559695),
+  ('L31-06', 6.412673, -7.546523),
+  ('L31-07', 6.57731, -8.029507),
+  ('L31-08', 6.578257, -8.039231),
+  ('L31-09', 6.548809, -7.873324),
+  ('L31-10', 6.387276, -8.212148),
+  ('L31-11', 6.311376, -8.147352),
+  ('L32-01', 6.437483, -8.151183),
+  ('L32-02', 6.351816, -8.220209),
+  ('L32-03', 6.797763, -7.879362),
+  ('L32-04', 6.50942, -8.066242),
+  ('L32-05', 6.429327, -8.189465),
+  ('L32-06', 6.587855, -8.063626),
+  ('L32-07', 6.588114, -8.064037),
+  ('L32-08', 6.587253, -8.107807),
+  ('L32-09', 6.61872, -8.152774),
+  ('L32-10', 6.593814, -8.093929),
+  ('L32-11', 6.627927, -8.192636),
+  ('L33-01', 5.33926, -6.099062),
+  ('L33-02', 5.139148, -6.084543),
+  ('L33-03', 5.472455, -5.83656),
+  ('L33-04', 5.441361, -5.861324),
+  ('L33-05', 5.297549, -5.926831),
+  ('L33-06', 5.28289, -5.923212),
+  ('L33-07', 5.231746, -5.935896),
+  ('L33-08', 5.29763, -6.039349),
+  ('L33-09', 5.035621, -6.152445),
+  ('L33-10', 5.147304, -6.348106),
+  ('L33-11', 5.299561, -6.367778),
+  ('L33-12', 5.119421, -5.58634),
+  ('L33-13', 5.362992, -5.68828),
+  ('L33-14', 4.934691, -6.114489)
+) as p (code, latitude, longitude)
+where s.code = p.code and s.latitude is null and s.longitude is null;
+
+-- >>>>>>>>>>>>>>>>>>>> 20261202100000_dqe_alertes.sql
+-- ============================================================================
+-- PONDÉRATION DQE, CORPS D'ÉTAT, PLANNING ET ALERTES
+--
+-- 1. Poids des postes = montants du DQE (FCFA HT, DQE CONSTRUCTION PATEB
+--    V130326) : salle de classe avec / sans électricité, latrines sèches et
+--    latrines à eau (3 cabines). Classe et latrines sont réunies dans un même
+--    calcul : avancement d'un site = Σ (montant du poste × % réalisé) / Σ
+--    montants (remplace la répartition fixe 80 % / 20 %). Nouveau poste
+--    « Plafonnage » des latrines à eau (lot 17 du DQE).
+-- 2. Corps d'état (lots du DQE) : chaque poste est rattaché à un corps
+--    d'état (diagramme d'avancement par corps d'état).
+-- 3. Montant de chaque site (vue : colonne montant) ; poids d'un lot = somme
+--    des montants de ses sites ; courbe d'évolution pondérée par les montants.
+-- 4. Date de début des travaux de chaque site (planning théorique) et
+--    paramètres des alertes.
+-- 5. Positions de 5 sites supplémentaires (noms différents sur la carte).
+--
+-- À exécuter APRÈS 20261201100000_entreprises_positions.sql. Rejouable.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 1–2. Corps d'état et postes
+-- ----------------------------------------------------------------------------
+create table if not exists public.chantierci_corps_etat (
+  code text primary key check (code ~ '^[a-z_]+$'),
+  libelle text not null,
+  ordre smallint not null
+);
+comment on table public.chantierci_corps_etat is 'Corps d''état (lots du DQE) regroupant les postes de la salle de classe et des latrines.';
+alter table public.chantierci_corps_etat enable row level security;
+drop policy if exists "chantierci_corps_etat_select" on public.chantierci_corps_etat;
+create policy "chantierci_corps_etat_select" on public.chantierci_corps_etat
+  for select to authenticated using ((select chantierci_private.user_role()) is not null);
+drop policy if exists "chantierci_corps_etat_ecriture_admin" on public.chantierci_corps_etat;
+create policy "chantierci_corps_etat_ecriture_admin" on public.chantierci_corps_etat
+  for all to authenticated
+  using ((select chantierci_private.user_role()) = 'admin')
+  with check ((select chantierci_private.user_role()) = 'admin');
+grant select, insert, update, delete on public.chantierci_corps_etat to authenticated;
+revoke all on public.chantierci_corps_etat from anon;
+
+insert into public.chantierci_corps_etat (code, libelle, ordre) values
+  ('terrassements',        'Terrassements',              1),
+  ('gros_oeuvre',          'Gros œuvre',                 2),
+  ('charpente_couverture', 'Charpente, couverture',      3),
+  ('plomberie',            'Plomberie, sanitaire',       4),
+  ('electricite',          'Électricité',                5),
+  ('serrurerie',           'Serrurerie',                 6),
+  ('menuiserie',           'Menuiserie bois',            7),
+  ('plafonds',             'Faux-plafond, plafonnage',   8),
+  ('revetements',          'Revêtements durs',           9),
+  ('peinture',             'Peinture',                  10)
+on conflict (code) do update set libelle = excluded.libelle, ordre = excluded.ordre;
+
+alter table public.chantierci_postes add column if not exists poids_sans_electricite numeric
+  check (poids_sans_electricite is null or poids_sans_electricite >= 0);
+alter table public.chantierci_postes add column if not exists corps_etat text
+  references public.chantierci_corps_etat (code);
+comment on column public.chantierci_postes.poids is 'Montant du poste au DQE (FCFA HT) : pondération de l''avancement.';
+comment on column public.chantierci_postes.poids_sans_electricite is 'Montant pour un site sans électricité, s''il diffère (sinon poids).';
+
+insert into public.chantierci_postes (ouvrage, code, libelle, poids, poids_sans_electricite, ordre, corps_etat) values
+  ('classe', 'terrassements',   'Terrassements, implantation',               398125, null,  1, 'terrassements'),
+  ('classe', 'fondations',      'Gros œuvre — fondations, dallage',         2210700, null,  2, 'gros_oeuvre'),
+  ('classe', 'elevation',       'Gros œuvre — élévation, enduits',          2559200, null,  3, 'gros_oeuvre'),
+  ('classe', 'ouvrages_divers', 'Ouvrages divers (marches, rampe, clôture)', 1462020, null,  4, 'gros_oeuvre'),
+  ('classe', 'charpente',       'Charpente bois',                            276200, null,  5, 'charpente_couverture'),
+  ('classe', 'couverture',      'Couverture',                                847040, null,  6, 'charpente_couverture'),
+  ('classe', 'serrurerie',      'Serrurerie (portes, persiennes)',           385240, null,  7, 'serrurerie'),
+  ('classe', 'electricite',     'Électricité',                               488790, 135000, 8, 'electricite'),
+  ('classe', 'menuiserie',      'Menuiserie bois (tableau, placards)',        47600, null,  9, 'menuiserie'),
+  ('classe', 'faux_plafond',    'Faux-plafond',                              890000, null, 10, 'plafonds'),
+  ('classe', 'peinture',        'Peinture',                                  672465, null, 11, 'peinture'),
+  ('latrines_a_eau', 'terrassements',        'Terrassements',                   70940, null, 1, 'terrassements'),
+  ('latrines_a_eau', 'gros_oeuvre',          'Gros œuvre (fosses, élévation)', 1069580, null, 2, 'gros_oeuvre'),
+  ('latrines_a_eau', 'charpente_couverture', 'Charpente, couverture',           306000, null, 3, 'charpente_couverture'),
+  ('latrines_a_eau', 'plafonnage',           'Plafonnage',                      172500, null, 4, 'plafonds'),
+  ('latrines_a_eau', 'menuiserie',           'Menuiserie bois',                 135000, null, 5, 'menuiserie'),
+  ('latrines_a_eau', 'plomberie',            'Plomberie, sanitaires',          1879500, null, 6, 'plomberie'),
+  ('latrines_a_eau', 'revetements',          'Revêtements durs',                132225, null, 7, 'revetements'),
+  ('latrines_a_eau', 'electricite',          'Électricité',                      94000, null, 8, 'electricite'),
+  ('latrines_a_eau', 'peinture',             'Peinture',                        105000, null, 9, 'peinture'),
+  ('latrines_seches', 'terrassements',        'Terrassements',                  125080, null, 1, 'terrassements'),
+  ('latrines_seches', 'gros_oeuvre',          'Gros œuvre (fosses, élévation)', 1835270, null, 2, 'gros_oeuvre'),
+  ('latrines_seches', 'charpente_couverture', 'Charpente, couverture',          215600, null, 3, 'charpente_couverture'),
+  ('latrines_seches', 'menuiserie',           'Menuiserie bois',                135000, null, 4, 'menuiserie'),
+  ('latrines_seches', 'ventilation',          'Ventilation, équipements sanitaires', 39600, null, 5, 'plomberie'),
+  ('latrines_seches', 'peinture',             'Peinture',                       114000, null, 6, 'peinture')
+on conflict (ouvrage, code) do update set
+  libelle = excluded.libelle, poids = excluded.poids, poids_sans_electricite = excluded.poids_sans_electricite,
+  ordre = excluded.ordre, corps_etat = excluded.corps_etat;
+
+-- ----------------------------------------------------------------------------
+-- Calcul : classe et latrines réunies, pondérées par les montants du DQE.
+-- Le poste électricité compte aussi pour un site sans électricité (montant
+-- poids_sans_electricite). NULL si aucun poste saisi.
+-- ----------------------------------------------------------------------------
+create or replace function chantierci_private.avancement_ouvrage(
+  p_postes jsonb, p_ouvrage text, p_electricite boolean
+) returns numeric
+language sql stable set search_path = ''
+as $$
+  select case
+    when p_postes is null or jsonb_typeof(p_postes) <> 'object' or p_postes = '{}'::jsonb then null
+    when sum(p.poids) = 0 then null
+    else sum(p.poids * least(greatest(coalesce((p_postes ->> p.code)::numeric, 0), 0), 100)) / sum(p.poids)
+  end
+  from (
+    select po.code,
+           case when not p_electricite and po.poids_sans_electricite is not null
+                then po.poids_sans_electricite else po.poids end as poids
+    from public.chantierci_postes po
+    where po.ouvrage = p_ouvrage
+  ) p;
+$$;
+
+create or replace function chantierci_private.avancement_site(
+  p_postes jsonb, p_electricite boolean, p_type_latrines public.chantierci_type_latrines
+) returns numeric
+language sql stable set search_path = ''
+as $$
+  select case
+    when p_postes is null or jsonb_typeof(p_postes) <> 'object'
+      or (coalesce(p_postes -> 'classe', '{}'::jsonb) = '{}'::jsonb
+          and coalesce(p_postes -> 'latrines', '{}'::jsonb) = '{}'::jsonb) then null
+    when sum(p.poids) = 0 then null
+    else round(sum(p.poids * least(greatest(coalesce(p.valeur, 0), 0), 100)) / sum(p.poids), 1)
+  end
+  from (
+    select case when not p_electricite and po.poids_sans_electricite is not null
+                then po.poids_sans_electricite else po.poids end as poids,
+           (case when po.ouvrage = 'classe' then p_postes -> 'classe' else p_postes -> 'latrines' end
+             ->> po.code)::numeric as valeur
+    from public.chantierci_postes po
+    where po.ouvrage in ('classe', 'latrines_' || p_type_latrines::text)
+  ) p;
+$$;
+revoke all on function chantierci_private.avancement_site(jsonb, boolean, public.chantierci_type_latrines) from public;
+grant execute on function chantierci_private.avancement_site(jsonb, boolean, public.chantierci_type_latrines) to authenticated;
+
+-- Montant d'un site au DQE (salle de classe + latrines de son type, FCFA HT).
+create or replace function chantierci_private.montant_site(
+  p_electricite boolean, p_type_latrines public.chantierci_type_latrines
+) returns numeric
+language sql stable set search_path = ''
+as $$
+  select coalesce(sum(case when not p_electricite and po.poids_sans_electricite is not null
+                           then po.poids_sans_electricite else po.poids end), 0)
+  from public.chantierci_postes po
+  where po.ouvrage in ('classe', 'latrines_' || p_type_latrines::text);
+$$;
+revoke all on function chantierci_private.montant_site(boolean, public.chantierci_type_latrines) from public;
+grant execute on function chantierci_private.montant_site(boolean, public.chantierci_type_latrines) to authenticated;
+
+-- La répartition fixe classe / latrines ne sert plus ; paramètres du planning et des alertes.
+delete from public.chantierci_parametres where cle in ('part_classe', 'part_latrines');
+insert into public.chantierci_parametres (cle, valeur, libelle) values
+  ('delai_travaux_mois', 5, 'Délai des travaux d''un site (mois) : avancement théorique linéaire depuis la date de début'),
+  ('fraicheur_alertes_jours', 30, 'Alertes : seuls les formulaires de moins de N jours sont pris en compte'),
+  ('seuil_retard_orange', 10, 'Alerte « à surveiller » : retard sur l''avancement théorique d''au moins (points)'),
+  ('seuil_retard_rouge', 20, 'Alerte critique : retard sur l''avancement théorique d''au moins (points)')
+on conflict (cle) do nothing;
+
+-- ----------------------------------------------------------------------------
+-- 3–4. Date de début, montant des sites, poids des lots
+-- ----------------------------------------------------------------------------
+alter table public.chantierci_sites add column if not exists date_debut date;
+comment on column public.chantierci_sites.date_debut is 'Début des travaux (planning théorique : délai delai_travaux_mois).';
+
+update public.chantierci_lots l
+set poids = coalesce((
+  select sum(chantierci_private.montant_site(s.electricite, s.type_latrines))
+  from public.chantierci_sites s where s.lot_id = l.id and s.actif), 0);
+comment on column public.chantierci_lots.poids is 'Poids du lot dans l''avancement global : montant DQE de ses sites (FCFA HT) par défaut.';
+
+-- Vue : + montant DQE et date de début (colonnes ajoutées à la fin)
+create or replace view public.chantierci_v_etat_sites
+with (security_invoker = true) as
+with params as (
+  select
+    coalesce(max(valeur) filter (where cle = 'fenetre_comparaison_jours'), 7)::int as fenetre,
+    coalesce(max(valeur) filter (where cle = 'seuil_ecart_ug_moe'), 5) as seuil
+  from public.chantierci_parametres
+)
+select
+  s.id,
+  s.code,
+  s.nom,
+  s.lot_id,
+  s.lot_moe_id,
+  s.region,
+  s.departement,
+  s.localite,
+  s.electricite,
+  s.type_latrines,
+  -- Position : coordonnées du site, sinon moyenne des photos géolocalisées,
+  -- sinon chef-lieu du département (décalé de quelques km pour ne pas
+  -- superposer les sites).
+  coalesce(s.latitude, gps.latitude,
+    d.latitude + ((('x' || substr(md5(s.code), 1, 4))::bit(16)::int) / 65535.0 - 0.5) * 0.16) as latitude,
+  coalesce(s.longitude, gps.longitude,
+    d.longitude + ((('x' || substr(md5(s.code), 5, 4))::bit(16)::int) / 65535.0 - 0.5) * 0.16) as longitude,
+  case
+    when s.latitude is not null and s.longitude is not null then 'site'
+    when gps.latitude is not null then 'photos'
+    when d.nom is not null then 'departement'
+  end as origine_position,
+  moe.date_visite as moe_date,
+  moe.statut as moe_statut,
+  moe.postes as moe_postes,
+  moe.avancement as moe_avancement,
+  (select count(*) from public.chantierci_visites v where v.site_id = s.id and v.source = 'moe')::int as moe_nb,
+  ug.date_visite as ug_date,
+  ug.statut as ug_statut,
+  ug.avancement as ug_avancement,
+  ref.date_visite as ug_date_moe_comparee,
+  ref.avancement as ug_avancement_moe_compare,
+  round(ug.avancement - ref.avancement, 1) as ecart_ug_moe,
+  coalesce(abs(ug.avancement - ref.avancement) > p.seuil, false) as discordance,
+  cstc.date_visite as cstc_date,
+  cstc.statut as cstc_statut,
+  -- Détail des dernières visites (onglet Difficultés)
+  moe.reponses as moe_reponses,
+  moe.commentaire as moe_commentaire,
+  case when moe.statut = 'arrete' then arret.depuis end as moe_arrete_depuis,
+  ug.reponses as ug_reponses,
+  ug.commentaire as ug_commentaire,
+  cstc.reponses as cstc_reponses,
+  cstc.commentaire as cstc_commentaire,
+  -- Montant DQE du site et début des travaux (planning théorique)
+  chantierci_private.montant_site(s.electricite, s.type_latrines) as montant,
+  s.date_debut
+from public.chantierci_sites s
+cross join params p
+left join public.chantierci_departements d on d.nom = s.departement
+left join lateral (
+  select v.date_visite, v.statut, v.postes, v.reponses, v.commentaire, v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) moe on true
+left join lateral (
+  select v.date_visite, v.statut, v.reponses, v.commentaire,
+         v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'ug'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) ug on true
+left join lateral (
+  select v.date_visite,
+         v.avancement
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe'
+    and ug.date_visite is not null
+    and abs(v.date_visite - ug.date_visite) <= p.fenetre
+  order by abs(v.date_visite - ug.date_visite), v.date_visite desc, v.created_at desc
+  limit 1
+) ref on true
+left join lateral (
+  select v.date_visite, v.statut, v.reponses, v.commentaire
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'cstc'
+  order by v.date_visite desc, v.created_at desc
+  limit 1
+) cstc on true
+-- Début de l'arrêt en cours : premier rapport « arrêté » après le dernier rapport d'un autre statut.
+left join lateral (
+  select min(v.date_visite) as depuis
+  from public.chantierci_visites v
+  where v.site_id = s.id and v.source = 'moe' and v.statut = 'arrete'
+    and v.date_visite > coalesce(
+      (select max(w.date_visite) from public.chantierci_visites w
+       where w.site_id = s.id and w.source = 'moe' and w.statut <> 'arrete'),
+      '-infinity'::date)
+) arret on true
+left join lateral (
+  select avg(ph.latitude) as latitude, avg(ph.longitude) as longitude
+  from public.chantierci_photos ph
+  join public.chantierci_visites v on v.id = ph.visite_id
+  where v.site_id = s.id and ph.latitude is not null and ph.longitude is not null
+) gps on true
+where s.actif;
+
+comment on view public.chantierci_v_etat_sites is
+  'Une ligne par site actif : dernier rapport MOE (référence), dernière fiche UG et écart avec la visite MOE la plus proche, dernier signalement CSTC, position, montant DQE, début des travaux.';
+grant select on public.chantierci_v_etat_sites to authenticated;
+revoke all on public.chantierci_v_etat_sites from anon;
+
+-- Avancement enregistré de tous les formulaires, recalculé avec les montants du DQE.
+update public.chantierci_visites v
+set avancement = chantierci_private.avancement_site(v.postes, s.electricite, s.type_latrines)
+from public.chantierci_sites s
+where s.id = v.site_id and v.source in ('moe', 'ug')
+  and v.avancement is distinct from chantierci_private.avancement_site(v.postes, s.electricite, s.type_latrines);
+
+-- Évolution de l'avancement global : sites pondérés par leur montant DQE
+-- dans chaque lot ; global pondéré par le poids des lots.
+create or replace function public.chantierci_evolution_avancement(p_lot_moe integer default null)
+returns table (date_ref date, avancement numeric)
+language sql stable set search_path = ''
+as $$
+  with bornes as (
+    select min(v.date_visite) as debut from public.chantierci_visites v where v.source = 'moe'
+  ),
+  dates as (
+    select (current_date - 7 * n)::date as date_ref
+    from bornes, generate_series(0, least(52, greatest(0, (current_date - bornes.debut) / 7 + 1))) as n
+    where bornes.debut is not null
+  ),
+  sites as (
+    select s.id, s.lot_id, chantierci_private.montant_site(s.electricite, s.type_latrines) as montant
+    from public.chantierci_sites s
+    where s.actif and (p_lot_moe is null or s.lot_moe_id = p_lot_moe)
+  ),
+  rapports as (
+    select v.site_id, st.lot_id, st.montant, v.date_visite, coalesce(v.avancement, 0) as av,
+           lead(v.date_visite) over (partition by v.site_id order by v.date_visite, v.created_at) as suivant
+    from public.chantierci_visites v
+    join sites st on st.id = v.site_id
+    where v.source = 'moe'
+  ),
+  sommes as (
+    select d.date_ref, r.lot_id, sum(r.av * r.montant) as total
+    from dates d
+    join rapports r on r.date_visite <= d.date_ref and (r.suivant is null or r.suivant > d.date_ref)
+    group by d.date_ref, r.lot_id
+  ),
+  lots as (
+    select st.lot_id, sum(st.montant) as montant from sites st group by st.lot_id
+  )
+  select d.date_ref,
+         round(sum(coalesce(so.total, 0) / nullif(l.montant, 0) * lo.poids) / nullif(sum(lo.poids), 0), 1)
+  from dates d
+  cross join lots l
+  join public.chantierci_lots lo on lo.id = l.lot_id
+  left join sommes so on so.date_ref = d.date_ref and so.lot_id = l.lot_id
+  group by d.date_ref
+  order by d.date_ref;
+$$;
+revoke all on function public.chantierci_evolution_avancement(integer) from public, anon;
+grant execute on function public.chantierci_evolution_avancement(integer) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 5. Positions : sites dont le nom diffère sur la cartographie PATEB v4
+-- ----------------------------------------------------------------------------
+update public.chantierci_sites s
+set latitude = p.latitude, longitude = p.longitude
+from (values
+  ('L01-02', 9.477547, -3.17374),    -- EPP BOUKO 3 : « EPP BOUKO 2 » sur la carte
+  ('L06-09', 8.405857, -4.608368),   -- EPP BOKALA 1 : un seul point « EPP BOKALA »
+  ('L06-10', 8.405857, -4.608368),   -- EPP BOKALA 2 : idem
+  ('L07-08', 8.5754, -5.207088),     -- EPP DE FOLOFONKAHA (2e classe, même école que L05-12)
+  ('L08-14', 8.765324, -5.684324)    -- EPP 1A DE TORTIYA : point du groupe scolaire « 1B »
+) as p (code, latitude, longitude)
+where s.code = p.code and s.latitude is null and s.longitude is null;
 
 commit;

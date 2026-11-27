@@ -37,6 +37,7 @@ drop table if exists public.chantierci_affectations cascade;
 drop table if exists public.chantierci_sites cascade;
 drop table if exists public.chantierci_profiles cascade;
 drop table if exists public.chantierci_lots cascade;
+drop table if exists public.chantierci_entreprises cascade;
 drop table if exists public.chantierci_lots_moe cascade;
 drop type if exists public.chantierci_role;
 drop type if exists public.chantierci_type_latrines;

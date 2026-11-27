@@ -10,7 +10,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { LIBELLES_STATUTS } from "@/lib/formulaires/statuts";
-import { dateCourte, pct, type EtatSite } from "@/lib/tableau-de-bord/calculs";
+import { dateCourte, pct, type SiteTableau } from "@/lib/tableau-de-bord/calculs";
 import { ORDRE_STATUTS, VARIABLE_STATUT } from "@/lib/tableau-de-bord/couleurs";
 
 export type ModeCarte = "statut" | "avancement";
@@ -26,7 +26,7 @@ const lireCouleur = (variable: string) => {
 const echapper = (t: string) =>
   t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function popup(s: EtatSite): string {
+function popup(s: SiteTableau): string {
   const statut = s.moe_statut ? LIBELLES_STATUTS[s.moe_statut] : "Pas de rapport MOE";
   const position =
     s.origine_position === "departement"
@@ -46,7 +46,7 @@ function popup(s: EtatSite): string {
   </div>`;
 }
 
-export default function CarteSites({ sites }: { sites: EtatSite[] }) {
+export default function CarteSites({ sites }: { sites: SiteTableau[] }) {
   const conteneur = useRef<HTMLDivElement>(null);
   const carte = useRef<L.Map | null>(null);
   const couche = useRef<L.LayerGroup | null>(null);

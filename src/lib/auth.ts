@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -7,8 +8,12 @@ import { ROLES_DEMANDABLES } from "@/lib/auth-roles";
 
 export type Profil = Tables<"chantierci_profiles">;
 
-/** Utilisateur connecté + son profil (null si absent). */
-export async function getUtilisateurEtProfil(): Promise<{
+/**
+ * Utilisateur connecté + son profil (null si absent). Mis en cache pour la
+ * durée d'une requête : le layout protégé et la page (exigerRole) partagent
+ * ainsi un seul aller-retour vers Supabase au lieu de deux.
+ */
+export const getUtilisateurEtProfil = cache(async function getUtilisateurEtProfil(): Promise<{
   user: User | null;
   profil: Profil | null;
 }> {
@@ -25,7 +30,7 @@ export async function getUtilisateurEtProfil(): Promise<{
     .maybeSingle();
 
   return { user, profil };
-}
+});
 
 /**
  * Crée le profil à la première connexion d'un compte inscrit par email, à

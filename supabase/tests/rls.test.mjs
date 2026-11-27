@@ -55,8 +55,10 @@ const compte = async (user, table) => Number((await en(user, `select count(*)::i
 const tot = (await db.query("select count(*)::int n, count(*) filter (where type_latrines='a_eau')::int eau, count(*) filter (where not electricite)::int sans_elec from public.chantierci_sites")).rows[0];
 verifier("387 sites importés", tot.n === 387, JSON.stringify(tot));
 verifier("111 latrines à eau, 18 sans électricité", tot.eau === 111 && tot.sans_elec === 18);
-const poids = (await db.query("select sum(poids)::int s from public.chantierci_lots")).rows[0].s;
-verifier("poids des lots = nb de sites (somme 387)", poids === 387);
+const poids = (await db.query(`select (select sum(poids) from public.chantierci_lots)::bigint lots,
+  (select sum(chantierci_private.montant_site(electricite, type_latrines)) from public.chantierci_sites)::bigint sites`)).rows[0];
+verifier("poids des lots = montant DQE de leurs sites", Number(poids.lots) === Number(poids.sites) && Number(poids.lots) > 4e9,
+  `${poids.lots} FCFA`);
 const moe2 = (await db.query("select count(*)::int n from public.chantierci_sites where lot_moe_id = 2")).rows[0].n;
 
 // --- Périmètres de lecture ---------------------------------------------------------

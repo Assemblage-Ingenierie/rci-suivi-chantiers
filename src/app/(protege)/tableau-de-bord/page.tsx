@@ -1,7 +1,8 @@
 import { exigerRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { chargerReferentielCalcul } from "@/lib/formulaires/chargement";
-import { dateLongue, type EtatSite } from "@/lib/tableau-de-bord/calculs";
+import { COLONNES_SITES, dateLongue, type SiteTableau } from "@/lib/tableau-de-bord/calculs";
+import { alertesSite, nbCritiques, parametresAlertes } from "@/lib/alertes/regles";
 import { TableauDeBord } from "@/components/tableau-de-bord/TableauDeBord";
 import type { PointEvolution } from "@/components/tableau-de-bord/CourbeEvolution";
 import { NB_SEMAINES, type LigneRemplissage } from "@/lib/suivi/remplissage";
@@ -18,12 +19,12 @@ export default async function PageTableauDeBord() {
     { data: sites, error },
     { data: lots },
     { data: lotsMoe },
-    { postes },
+    { postes, corps, parametres },
     { data: evolution, error: erreurEvolution },
     { data: remplissage },
   ] = await Promise.all([
-      supabase.from("chantierci_v_etat_sites").select("*").order("code").range(0, 999),
-      supabase.from("chantierci_lots").select("id, nom, poids, entreprise_titulaire").order("id"),
+      supabase.from("chantierci_v_etat_sites").select(COLONNES_SITES.tableau).order("code").range(0, 999),
+      supabase.from("chantierci_lots").select("id, nom, poids").order("id"),
       supabase.from("chantierci_lots_moe").select("id, nom, regions").order("id"),
       chargerReferentielCalcul(supabase),
       supabase.rpc("chantierci_evolution_avancement", { p_lot_moe: null }),
@@ -31,6 +32,32 @@ export default async function PageTableauDeBord() {
     ]);
 
   const aJour = new Date().toISOString().slice(0, 10);
+  // Sites allégés pour le navigateur : les réponses des formulaires ne servent
+  // qu'à compter les sites à suivre, calculé ici.
+  const aujourdhui = new Date();
+  const regles = parametresAlertes(parametres);
+  const sitesTableau: SiteTableau[] = (sites ?? []).map((s) => ({
+    id: s.id,
+    code: s.code,
+    nom: s.nom,
+    departement: s.departement,
+    localite: s.localite,
+    lot_id: s.lot_id,
+    lot_moe_id: s.lot_moe_id,
+    electricite: s.electricite,
+    type_latrines: s.type_latrines,
+    latitude: s.latitude,
+    longitude: s.longitude,
+    origine_position: s.origine_position,
+    moe_statut: s.moe_statut,
+    moe_date: s.moe_date,
+    moe_avancement: s.moe_avancement,
+    moe_postes: s.moe_postes,
+    montant: s.montant,
+    ecart_ug_moe: s.ecart_ug_moe,
+    discordance: s.discordance,
+    a_suivre: nbCritiques(alertesSite(s, regles, aujourdhui)) > 0,
+  }));
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 lg:p-6">
@@ -48,10 +75,11 @@ export default async function PageTableauDeBord() {
         </EnPreparation>
       ) : (
         <TableauDeBord
-          sites={(sites ?? []) as EtatSite[]}
+          sites={sitesTableau}
           lots={(lots ?? []).map((l) => ({ ...l, poids: Number(l.poids) }))}
           lotsMoe={lotsMoe ?? []}
           postes={postes}
+          corps={corps}
           evolutionInitiale={(evolution ?? []) as PointEvolution[]}
           remplissage={(remplissage ?? []) as LigneRemplissage[]}
         />

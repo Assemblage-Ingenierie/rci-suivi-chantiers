@@ -48,14 +48,16 @@ export function LayoutShell({
       {menuOuvert && (
         <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setMenuOuvert(false)} />
       )}
-      <Sidebar
-        nomComplet={nomComplet}
-        role={role}
-        mobileOuverte={menuOuvert}
-        surFermetureMobile={() => setMenuOuvert(false)}
-      />
+      <div className="contents print:hidden">
+        <Sidebar
+          nomComplet={nomComplet}
+          role={role}
+          mobileOuverte={menuOuvert}
+          surFermetureMobile={() => setMenuOuvert(false)}
+        />
+      </div>
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-bordure bg-surface px-4 lg:hidden">
+        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-bordure bg-surface px-4 lg:hidden print:hidden">
           <button
             onClick={() => setMenuOuvert(true)}
             className="rounded-champ p-2 text-texte-2 hover:bg-surface-2"
