@@ -1,8 +1,11 @@
 import Image from "next/image";
 import { MARQUE } from "@/theme/marque";
 
-/** Logo de l'application : image si définie dans src/theme/marque.ts, sinon sigle texte. */
-export function Logo({ surAccent = false }: { surAccent?: boolean }) {
+/**
+ * Logo de l'application : image si définie dans src/theme/marque.ts, sinon
+ * sigle texte. `largeur` : largeur affichée en pixels (hauteur proportionnelle).
+ */
+export function Logo({ surAccent = false, largeur = 200 }: { surAccent?: boolean; largeur?: number }) {
   if (MARQUE.logo) {
     return (
       <Image
@@ -11,6 +14,7 @@ export function Logo({ surAccent = false }: { surAccent?: boolean }) {
         height={MARQUE.logo.hauteur}
         alt={MARQUE.logo.alt}
         priority
+        style={{ width: largeur, height: "auto" }}
       />
     );
   }

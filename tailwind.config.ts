@@ -23,6 +23,9 @@ const config: Config = {
         danger: { DEFAULT: v("danger"), clair: v("danger-clair") },
         info: { DEFAULT: v("info"), clair: v("info-clair") },
         graphe: { piste: v("graphe-piste"), rempli: v("graphe-rempli"), repere: v("graphe-repere") },
+        pateb: { bleu: v("pateb-bleu"), orange: v("pateb-orange"), vert: v("pateb-vert"), rouge: v("pateb-rouge") },
+        menu: { DEFAULT: v("menu"), actif: v("menu-actif") },
+        source: { moe: v("source-moe"), cstc: v("source-cstc"), ug: v("source-ug") },
       },
       borderRadius: {
         carte: "var(--rayon)",
@@ -30,6 +33,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--police)", "system-ui", "sans-serif"],
+        titre: ["var(--police-titre)", "var(--police)", "system-ui", "sans-serif"],
       },
     },
   },

@@ -1,70 +1,85 @@
 /* ============================================================================
  * CHARTE GRAPHIQUE — fichier unique
  *
+ * Identité PATEB : couleurs relevées sur le logo du programme (bleu PATEB,
+ * orange et vert du drapeau ivoirien, rouge de « Éducation de Base »).
+ * Typographie : IBM Plex Sans Condensed (titres) et IBM Plex Sans (texte),
+ * chargées dans src/app/layout.tsx.
+ *
  * Pour changer la charte : modifier les valeurs ci-dessous (et la marque dans
  * src/theme/marque.ts). Aucun composant ne contient de couleur en dur : ils
  * utilisent les noms d'usage (bg-accent, text-texte-2, border-bordure…)
  * définis dans tailwind.config.ts à partir de ces variables.
  *
- * Format : composantes RVB séparées par des espaces (« 91 42 42 »), pour que
+ * Format : composantes RVB séparées par des espaces (« 11 51 82 »), pour que
  * Tailwind puisse appliquer une transparence (bg-accent/10).
  * ========================================================================== */
 
 :root {
+  /* Couleurs du logo */
+  --c-pateb-bleu: 11 51 82;       /* #0B3352 */
+  --c-pateb-orange: 243 146 0;    /* #F39200 */
+  --c-pateb-vert: 0 166 90;       /* #00A65A */
+  --c-pateb-rouge: 192 24 42;     /* #C0182A */
+
   /* Surfaces */
-  --c-fond: 244 241 236;          /* fond des pages (beige clair) */
+  --c-fond: 244 246 249;          /* fond des pages (gris bleuté) */
   --c-surface: 255 255 255;       /* cartes, champs */
-  --c-surface-2: 249 247 243;     /* zones secondaires dans une carte */
+  --c-surface-2: 247 249 251;     /* zones secondaires dans une carte */
 
   /* Textes */
-  --c-texte: 31 31 31;
-  --c-texte-2: 95 94 90;          /* texte secondaire */
-  --c-texte-3: 137 135 129;       /* indications, libellés discrets */
+  --c-texte: 27 37 51;            /* #1B2533 */
+  --c-texte-2: 85 96 110;         /* texte secondaire */
+  --c-texte-3: 128 138 151;       /* indications, libellés discrets */
 
   /* Traits */
-  --c-bordure: 225 221 213;
-  --c-bordure-forte: 196 191 181;
+  --c-bordure: 221 226 232;
+  --c-bordure-forte: 188 196 206;
 
   /* Choix sélectionné (boutons de réponse des formulaires) */
-  --c-selection: 227 238 245;
-  --c-selection-bordure: 31 86 115;
+  --c-selection: 228 236 245;
+  --c-selection-bordure: 11 51 82;
 
-  /* États */
-  --c-succes: 47 110 50;
-  --c-succes-clair: 232 242 226;
-  --c-alerte: 194 65 12;
-  --c-alerte-clair: 254 240 225;
-  --c-danger: 185 28 28;
-  --c-danger-clair: 252 235 235;
-  --c-info: 47 111 159;
-  --c-info-clair: 230 240 248;
+  /* États (distincts des couleurs des sources) */
+  --c-succes: 11 107 61;
+  --c-succes-clair: 225 244 234;
+  --c-alerte: 138 104 0;          /* « à surveiller » : jaune ocre (l'orange est la couleur de la MOE) */
+  --c-alerte-clair: 251 243 217;
+  --c-danger: 192 24 42;          /* critique : rouge du logo */
+  --c-danger-clair: 251 231 233;
+  --c-info: 31 95 153;
+  --c-info-clair: 227 238 248;
 
-  /* Graphiques du tableau de bord */
-  --c-graphe-piste: 232 228 220;  /* fond d'une colonne de la mosaïque */
-  --c-graphe-rempli: 31 86 115;   /* part réalisée */
-  --c-graphe-repere: 91 42 42;    /* ligne de l'avancement global */
-  --c-chaleur-min: 238 244 249;   /* carte de chaleur : 0 % */
-  --c-chaleur-max: 18 63 99;      /* carte de chaleur : 100 % */
+  /* Graphiques */
+  --c-graphe-piste: 226 231 237;  /* part restante */
+  --c-graphe-rempli: 11 51 82;    /* part réalisée : bleu PATEB */
+  --c-graphe-repere: 243 146 0;   /* repère (avancement global) : orange */
+  --c-chaleur-min: 232 240 248;
+  --c-chaleur-max: 11 51 82;
 
-  /* Types de formulaire (suivi du remplissage) : couleurs des profils */
-  --c-source-moe: 230 145 20;
-  --c-source-cstc: 26 79 110;
-  --c-source-ug: 140 60 60;
+  /* Une couleur par source d'information (formulaires, suivi, alertes, export) */
+  --c-source-moe: 243 146 0;      /* MOE : orange */
+  --c-source-cstc: 0 166 90;      /* CSTC : vert */
+  --c-source-ug: 11 51 82;        /* UG : bleu PATEB */
 
   /* Statuts des chantiers (diagrammes et carte) */
-  --c-statut-sans-rapport: 214 209 200;
-  --c-statut-non-demarre: 150 146 138;
-  --c-statut-en-cours: 47 111 159;
-  --c-statut-arrete: 185 28 28;
-  --c-statut-termine: 112 170 92;
-  --c-statut-receptionne: 39 98 44;
+  --c-statut-sans-rapport: 214 220 227;
+  --c-statut-non-demarre: 140 150 163;
+  --c-statut-en-cours: 59 130 196;
+  --c-statut-arrete: 192 24 42;
+  --c-statut-termine: 76 175 120;
+  --c-statut-receptionne: 11 107 61;
 
   /* Couleur d'accent : dépend du profil (voir plus bas). Valeur par défaut =
-     écrans publics (connexion, inscription). */
-  --c-accent: 91 42 42;
-  --c-accent-fonce: 66 28 28;
-  --c-accent-clair: 241 230 228;
+     écrans publics (connexion, inscription) : bleu PATEB. */
+  --c-accent: 11 51 82;
+  --c-accent-fonce: 6 34 56;
+  --c-accent-clair: 228 236 245;
   --c-sur-accent: 255 255 255;    /* texte posé sur la couleur d'accent */
+
+  /* Menu latéral (UG, admin) : bleu PATEB, onglet actif souligné d'orange */
+  --c-menu: 11 51 82;
+  --c-menu-actif: 243 146 0;
 
   /* Formes */
   --rayon: 10px;
@@ -72,37 +87,38 @@
 }
 
 /* ----------------------------------------------------------------------------
- * Une couleur d'accent par profil (attribut data-profil sur <body>).
+ * Une couleur d'accent par profil (attribut data-profil) = couleur de sa
+ * source d'information.
  * -------------------------------------------------------------------------- */
 
-/* UG — bordeaux */
+/* UG — bleu PATEB */
 [data-profil="ug"] {
-  --c-accent: 91 42 42;
-  --c-accent-fonce: 66 28 28;
-  --c-accent-clair: 241 230 228;
+  --c-accent: 11 51 82;
+  --c-accent-fonce: 6 34 56;
+  --c-accent-clair: 228 236 245;
   --c-sur-accent: 255 255 255;
 }
 
-/* CSTC — bleu */
+/* CSTC — vert */
 [data-profil="cstc"] {
-  --c-accent: 26 79 110;
-  --c-accent-fonce: 16 56 80;
-  --c-accent-clair: 227 238 245;
+  --c-accent: 0 140 76;
+  --c-accent-fonce: 0 108 58;
+  --c-accent-clair: 225 244 234;
   --c-sur-accent: 255 255 255;
 }
 
 /* MOE (contrôleurs et chefs de mission) — orange, texte foncé */
 [data-profil="moe"] {
-  --c-accent: 245 158 28;
-  --c-accent-fonce: 196 117 8;
-  --c-accent-clair: 254 243 224;
-  --c-sur-accent: 31 31 31;
+  --c-accent: 243 146 0;
+  --c-accent-fonce: 196 112 0;
+  --c-accent-clair: 254 242 222;
+  --c-sur-accent: 43 26 0;
 }
 
-/* Administration — ardoise */
+/* Administration — bleu PATEB (même espace de travail que l'UG) */
 [data-profil="admin"] {
-  --c-accent: 55 65 81;
-  --c-accent-fonce: 31 41 55;
-  --c-accent-clair: 233 235 239;
+  --c-accent: 11 51 82;
+  --c-accent-fonce: 6 34 56;
+  --c-accent-clair: 228 236 245;
   --c-sur-accent: 255 255 255;
 }

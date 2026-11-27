@@ -8,6 +8,16 @@ body {
   @apply bg-fond font-sans text-texte antialiased;
 }
 
+/* Titres en IBM Plex Sans Condensed (identité PATEB). */
+h1,
+h2,
+h3 {
+  @apply font-titre;
+}
+h1 {
+  @apply tracking-tight text-pateb-bleu;
+}
+
 /* Composants de base réutilisés partout (mêmes formes pour tous les profils). */
 @layer components {
   .carte {
