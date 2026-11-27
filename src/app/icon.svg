@@ -1,31 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Icône PATEB : crayons sortant d'un livre ouvert, sous l'arc orange et vert du logo. -->
+  <!-- Icône PATEB : crayons sortant d'un livre ouvert (dessin du logo, agrandi et épaissi pour rester lisible en petit). -->
   <rect width="512" height="512" rx="112" fill="#0B3352"/>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Arcs du logo (drapeau ivoirien) -->
-    <path d="M 58 300 A 198 198 0 0 1 454 300" stroke="#F39200" stroke-width="18"/>
-    <path d="M 88 306 A 168 168 0 0 1 424 306" stroke="#00A65A" stroke-width="14"/>
-    <g stroke="#FFFFFF">
-      <!-- Grand crayon -->
-      <path d="M 233 384 L 233 222 L 250 160 L 267 222 L 267 384" stroke-width="12"/>
-      <path d="M 233 222 Q 250 233 267 222" stroke-width="9"/>
-      <!-- Petit crayon, incliné -->
-      <g transform="rotate(24 289 386)">
-        <path d="M 277 386 L 277 292 L 290 244 L 303 292 L 303 386" stroke-width="11"/>
-        <path d="M 277 292 Q 290 301 303 292" stroke-width="8"/>
-      </g>
-      <!-- Livre ouvert : pages puis couverture -->
-      <path d="M 100 332 Q 198 310 256 386" stroke-width="8"/>
-      <path d="M 86 348 Q 192 328 256 392" stroke-width="8"/>
-      <path d="M 412 332 Q 314 310 256 386" stroke-width="8"/>
-      <path d="M 426 348 Q 320 328 256 392" stroke-width="8"/>
-      <path d="M 62 364 L 256 408 L 450 364" stroke-width="15"/>
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Livre ouvert : une page de chaque côté, puis la couverture -->
+    <path d="M 70 316 Q 190 288 256 392" stroke-width="16"/>
+    <path d="M 442 316 Q 322 288 256 392" stroke-width="16"/>
+    <path d="M 44 352 L 256 414 L 468 352" stroke-width="26"/>
+  </g>
+  <!-- Crayons devant les pages : corps rempli du fond, puis contour blanc -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 214 380 L 214 166 L 244 64 L 274 166 L 274 380 Z" fill="#0B3352" stroke="none"/>
+    <path d="M 214 380 L 214 166 L 244 64 L 274 166 L 274 380" fill="none" stroke="#FFFFFF" stroke-width="22"/>
+    <path d="M 214 166 Q 244 186 274 166" fill="none" stroke="#FFFFFF" stroke-width="16"/>
+    <g transform="rotate(24 302 384)">
+      <path d="M 282 384 L 282 244 L 302 178 L 322 244 L 322 384 Z" fill="#0B3352" stroke="none"/>
+      <path d="M 282 384 L 282 244 L 302 178 L 322 244 L 322 384" fill="none" stroke="#FFFFFF" stroke-width="20"/>
+      <path d="M 282 244 Q 302 260 322 244" fill="none" stroke="#FFFFFF" stroke-width="14"/>
     </g>
   </g>
   <!-- Pointes de mine et dos du livre -->
   <g fill="#FFFFFF">
-    <path d="M 243 186 L 250 160 L 257 186 Z"/>
-    <path d="M 284 266 L 290 244 L 296 266 Z" transform="rotate(24 289 386)"/>
-    <ellipse cx="256" cy="414" rx="30" ry="9"/>
+    <path d="M 232 104 L 244 64 L 256 104 Z"/>
+    <path d="M 293 208 L 302 178 L 311 208 Z" transform="rotate(24 302 384)"/>
+    <ellipse cx="256" cy="426" rx="42" ry="13"/>
   </g>
 </svg>
