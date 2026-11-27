@@ -205,9 +205,8 @@ export function RapportExport({
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2 print:grid-cols-2">
             <Comptage titre="Problèmes signalés" source="moe" question="problemes" formulaires={moe} exclure={["aucun"]} valeurs={(f) => liste(rep(f.reponses).problemes)} />
-            <Comptage titre="Suite à donner proposée" source="moe" question="suite" formulaires={moe} exclure={["aucune"]} valeurs={(f) => liste([rep(f.reponses).suite])} />
             <Comptage
-              titre="Qualité : éléments non conformes"
+              titre="Qualité : éléments non conformes au CCTP"
               source="moe"
               question="qualite"
               formulaires={moe}

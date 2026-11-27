@@ -104,7 +104,7 @@ export function OuiNonListe({
   );
 }
 
-/** Qualité d'exécution : une ligne par élément, 4 appréciations. */
+/** Qualité d'exécution : une ligne par élément, une appréciation (conforme / non conforme au CCTP). */
 export function QualiteListe({
   elements,
   options,
@@ -127,7 +127,7 @@ export function QualiteListe({
       {elements.map((e) => (
         <div key={e.valeur}>
           <p className="mb-1.5 text-sm font-semibold">{e.libelle}</p>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className={`grid gap-1.5 ${options.length === 2 ? "grid-cols-2" : "grid-cols-4"}`}>
             {options.map((o) => {
               const actif = valeurs[e.valeur] === o.valeur;
               return (

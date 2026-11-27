@@ -5,6 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
 import { BUCKET_PHOTOS_SERVEUR } from "./constantes";
+import { lireExif } from "./exif";
+
+/** Photo prise sur place (appareil photo) ou choisie dans la galerie du téléphone. */
+export type OriginePhoto = "camera" | "galerie";
 
 export const BUCKET_PHOTOS = BUCKET_PHOTOS_SERVEUR;
 
@@ -42,11 +46,28 @@ function position(): Promise<GeolocationPosition | null> {
 }
 
 /** Compresse la photo (< 500 Ko, 1600 px) et relève la position GPS. */
-export async function preparerPhoto(fichier: File): Promise<PhotoLocale> {
-  const [blob, pos] = await Promise.all([
-    imageCompression(fichier, { maxSizeMB: 0.5, maxWidthOrHeight: 1600, useWebWorker: true, fileType: "image/jpeg" }),
-    position(),
-  ]);
+export async function preparerPhoto(fichier: File, origine: OriginePhoto = "camera"): Promise<PhotoLocale> {
+  const compression = imageCompression(fichier, {
+    maxSizeMB: 0.5,
+    maxWidthOrHeight: 1600,
+    useWebWorker: true,
+    fileType: "image/jpeg",
+  });
+  if (origine === "galerie") {
+    // Photo déjà prise : sa position et sa date sont celles enregistrées dans
+    // la photo (EXIF), pas celles du téléphone au moment de l'envoi.
+    const [blob, exif] = await Promise.all([compression, lireExif(fichier)]);
+    return {
+      id: crypto.randomUUID(),
+      blob,
+      apercu: URL.createObjectURL(blob),
+      latitude: exif?.latitude ?? null,
+      longitude: exif?.longitude ?? null,
+      prise_le: exif?.date ?? new Date(fichier.lastModified || Date.now()).toISOString(),
+      legende: "",
+    };
+  }
+  const [blob, pos] = await Promise.all([compression, position()]);
   return {
     id: crypto.randomUUID(),
     blob,

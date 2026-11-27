@@ -23,7 +23,14 @@ export type Question =
   | { type: "oui_non"; id: string; libelle: string; elements: Option[] }
   | { type: "qualite"; id: string; libelle: string; elements: Option[] }
   | { type: "nombre"; id: string; libelle: string; min?: number; max?: number; pas?: number; alerteSiPositif?: boolean }
-  | { type: "texte"; id: string; libelle: string; indication?: string }
+  | {
+      type: "texte";
+      id: string;
+      libelle: string;
+      indication?: string;
+      /** Affiché et obligatoire seulement si la question indiquée contient cette valeur (ex. un élément « non conforme »). */
+      obligatoireSi?: { question: string; valeur: string };
+    }
   | { type: "commentaire"; id: "commentaire"; libelle: string; indication?: string }
   | { type: "postes"; id: "postes"; libelle: string }
   | { type: "quantites"; id: "quantites"; libelle: string }
