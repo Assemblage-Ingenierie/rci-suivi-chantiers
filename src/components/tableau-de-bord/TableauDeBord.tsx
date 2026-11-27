@@ -16,7 +16,7 @@ import {
   type LotRef,
 } from "@/lib/tableau-de-bord/calculs";
 import { couleurStatut, ORDRE_STATUTS } from "@/lib/tableau-de-bord/couleurs";
-import { achevementEstime, CourbeEvolution, rythme, type PointEvolution } from "./CourbeEvolution";
+import { CourbeEvolution, rythme, type PointEvolution } from "./CourbeEvolution";
 import { LigneEffectif } from "./Barres";
 import { Remplissage } from "./Remplissage";
 import type { SyntheseRemplissage } from "@/lib/suivi/remplissage";
@@ -144,7 +144,6 @@ export function TableauDeBord({
   const termines = filtres.filter((s) => s.moe_statut && TERMINES.includes(s.moe_statut)).length;
   const receptionnes = compte("receptionne");
   const r = evolution ? rythme(evolution) : null;
-  const fin = achevementEstime(global, r);
   const lotsTries = tri === "numero" ? synthese : [...synthese].sort((a, b) => a.moe - b.moe);
   const suffixeFiltre = lotMoe ? `&lot_moe=${lotMoe}` : "";
 
@@ -210,18 +209,6 @@ export function TableauDeBord({
           aide="Avancement pondéré par lot, à la fin de chaque semaine, d'après le dernier rapport MOE connu de chaque site."
         >
           {evolution ? <CourbeEvolution serie={evolution} /> : <p className="py-16 text-center text-sm text-texte-2"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Calcul…</p>}
-          {r !== null && (
-            <p className="mt-1 text-sm">
-              Rythme sur 4 semaines : <strong>{`${r >= 0 ? "+" : ""}${r.toFixed(1).replace(".", ",")} pt / semaine`}</strong>
-              {fin && (
-                <>
-                  {" "}· à ce rythme, fin des travaux vers{" "}
-                  <strong>{new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(fin)}</strong>
-                  <span className="text-texte-3"> (estimation)</span>
-                </>
-              )}
-            </p>
-          )}
         </Bloc>
         <Bloc titre="État des chantiers" aide={`Statut du dernier rapport MOE, sur ${n} sites.`}>
           <div className="space-y-0.5">

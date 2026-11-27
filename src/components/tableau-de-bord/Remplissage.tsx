@@ -105,7 +105,7 @@ export function Remplissage({
               <p className="mt-1 text-xs text-texte-2">
                 {s.retards ? (
                   <Link href={lien(`source=${s.source.cle}&retard=1`)} className="font-semibold text-alerte hover:underline">
-                    {s.retards} site{s.retards > 1 ? "s" : ""} sans {s.source.libelle} depuis plus de {s.source.retardJours} jours
+                    {s.retards} site{s.retards > 1 ? "s" : ""} sans formulaire {s.source.libelle} depuis plus de {s.source.retardJours} jours
                   </Link>
                 ) : (
                   <span className="text-succes">Aucun site en retard</span>

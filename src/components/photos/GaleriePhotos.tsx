@@ -64,7 +64,6 @@ export function GaleriePhotos({
   const [lot, setLot] = useState("");
   const [entreprise, setEntreprise] = useState("");
   const [lotMoe, setLotMoe] = useState("");
-  const [aVerifier, setAVerifier] = useState(false);
   const [sources, setSources] = useState<SourceFormulaire[]>(["moe", "cstc", "ug"]);
   const [tri, setTri] = useState<Tri>("recentes");
   const [sansPhoto, setSansPhoto] = useState(false);
@@ -105,7 +104,6 @@ export function GaleriePhotos({
           (!lot || s.lot_id === Number(lot)) &&
           (!entreprise || s.entreprise === entreprise) &&
           (!lotMoe || s.lot_moe_id === Number(lotMoe)) &&
-          (!aVerifier || s.a_verifier) &&
           (!q || sansAccents(`${s.code} ${s.nom} ${s.localite} ${s.departement} ${s.region} ${s.entreprise}`).includes(q))
       )
       .map((s) => ({ site: s, photos: parSite.get(s.id) ?? [] }))
@@ -114,9 +112,9 @@ export function GaleriePhotos({
     if (tri === "recentes") liste.sort((a, b) => derniere(b).localeCompare(derniere(a)) || a.site.code.localeCompare(b.site.code));
     if (tri === "nombre") liste.sort((a, b) => b.photos.length - a.photos.length || a.site.code.localeCompare(b.site.code));
     return liste;
-  }, [sites, parSite, recherche, lot, entreprise, lotMoe, aVerifier, sansPhoto, tri]);
+  }, [sites, parSite, recherche, lot, entreprise, lotMoe, sansPhoto, tri]);
 
-  useEffect(() => setAffiches(PAR_PAGE), [recherche, lot, entreprise, lotMoe, aVerifier, sansPhoto, tri, sources]);
+  useEffect(() => setAffiches(PAR_PAGE), [recherche, lot, entreprise, lotMoe, sansPhoto, tri, sources]);
 
   const total = lignes.reduce((a, l) => a + l.photos.length, 0);
   const changerPeriode = () => {
@@ -172,9 +170,6 @@ export function GaleriePhotos({
               </option>
             ))}
           </select>
-        </label>
-        <label className="flex items-center gap-2 pb-2.5 text-sm">
-          <input type="checkbox" checked={aVerifier} onChange={(e) => setAVerifier(e.target.checked)} />À vérifier
         </label>
       </div>
       <div className="carte flex flex-wrap items-end gap-x-5 gap-y-3 p-4">
