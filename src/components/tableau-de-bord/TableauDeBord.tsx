@@ -5,8 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { CorpsEtat, PosteDef } from "@/lib/formulaires/types";
-import { corpsEtatSites } from "@/lib/formulaires/avancement";
+import type { SegmentCorpsEtat } from "@/lib/formulaires/avancement";
 import { BarreCorpsEtat, LegendeCorpsEtat } from "@/components/BarreCorpsEtat";
 import {
   avancementGlobal,
@@ -20,7 +19,13 @@ import { couleurStatut, ORDRE_STATUTS } from "@/lib/tableau-de-bord/couleurs";
 import { achevementEstime, CourbeEvolution, rythme, type PointEvolution } from "./CourbeEvolution";
 import { LigneEffectif } from "./Barres";
 import { Remplissage } from "./Remplissage";
-import { suivi, synthese as syntheseRemplissage, type LigneRemplissage } from "@/lib/suivi/remplissage";
+import type { SyntheseRemplissage } from "@/lib/suivi/remplissage";
+
+/** Remplissage des formulaires, déjà synthétisé côté serveur pour chaque périmètre (« tous » ou n° de lot MOE). */
+export type RemplissageTableau = {
+  dateRef: string;
+  parPerimetre: Record<string, { syntheses: SyntheseRemplissage[]; nbSuivis: number }>;
+};
 
 const CarteSites = dynamic(() => import("./CarteSites"), {
   ssr: false,
@@ -85,18 +90,17 @@ export function TableauDeBord({
   sites,
   lots,
   lotsMoe,
-  postes,
-  corps,
+  corpsParLot,
   evolutionInitiale,
   remplissage,
 }: {
   sites: SiteTableau[];
   lots: LotRef[];
   lotsMoe: LotMoeRef[];
-  postes: PosteDef[];
-  corps: CorpsEtat[];
+  /** Avancement par corps d'état de chaque lot (calculé côté serveur). */
+  corpsParLot: Record<number, SegmentCorpsEtat[]>;
   evolutionInitiale: PointEvolution[];
-  remplissage: LigneRemplissage[];
+  remplissage: RemplissageTableau | null;
 }) {
   const [lotMoe, setLotMoe] = useState<number | null>(null);
   const [tri, setTri] = useState<"numero" | "avancement">("numero");
@@ -114,19 +118,22 @@ export function TableauDeBord({
   const filtres = useMemo(() => (lotMoe ? sites.filter((s) => s.lot_moe_id === lotMoe) : sites), [sites, lotMoe]);
   const synthese = useMemo(() => syntheseLots(filtres, lots), [filtres, lots]);
   const global = useMemo(() => avancementGlobal(synthese), [synthese]);
-  const sitesPostes = useMemo(
-    () => filtres.map((s) => ({ electricite: s.electricite, type_latrines: s.type_latrines, postes: s.moe_postes })),
-    [filtres]
-  );
-  const corpsEtat = useMemo(() => corpsEtatSites(sitesPostes, postes, corps), [sitesPostes, postes, corps]);
-  const corpsParLot = useMemo(() => {
-    const m = new Map<number, typeof sitesPostes>();
-    filtres.forEach((s, i) => m.set(s.lot_id, [...(m.get(s.lot_id) ?? []), sitesPostes[i]]));
-    return new Map([...m].map(([lot, ss]) => [lot, corpsEtatSites(ss, postes, corps)]));
-  }, [filtres, sitesPostes, postes, corps]);
-  const parSite = useMemo(() => new Map(remplissage.map((l) => [l.site_id, l])), [remplissage]);
-  const sitesSuivis = useMemo(() => filtres.filter((s) => suivi(parSite.get(s.id))).map((s) => s.id), [filtres, parSite]);
-  const syntheses = useMemo(() => syntheseRemplissage(sitesSuivis, parSite), [sitesSuivis, parSite]);
+  // Corps d'état du périmètre = somme des lots qu'il contient (montants et réalisé s'additionnent).
+  const corpsEtat = useMemo(() => {
+    const lotsPerimetre = new Set(filtres.map((s) => s.lot_id));
+    const somme = new Map<string, SegmentCorpsEtat>();
+    for (const [lot, segments] of Object.entries(corpsParLot)) {
+      if (!lotsPerimetre.has(Number(lot))) continue;
+      for (const seg of segments) {
+        const e = somme.get(seg.code) ?? { ...seg, montant: 0, realise: 0 };
+        e.montant += seg.montant;
+        e.realise += seg.realise;
+        somme.set(seg.code, e);
+      }
+    }
+    return [...somme.values()];
+  }, [filtres, corpsParLot]);
+  const remplissagePerimetre = remplissage?.parPerimetre[cle] ?? null;
   // Sites à suivre : au moins une difficulté sérieuse (calculé côté serveur, voir aSuivre()).
   const aSuivre = useMemo(() => filtres.filter((s) => s.a_suivre).length, [filtres]);
 
@@ -233,13 +240,18 @@ export function TableauDeBord({
       </div>
 
       {/* 3. Remplissage des formulaires */}
-      {remplissage.length > 0 && (
+      {remplissage && remplissagePerimetre && (
         <Bloc
           titre="Remplissage des formulaires"
           source={false}
           aide="Part des formulaires attendus effectivement reçus, par acteur. Un formulaire n'est attendu que si l'acteur a déclaré le chantier « en cours » dans son dernier formulaire (voir l'encadré)."
         >
-          <Remplissage syntheses={syntheses} dateRef={remplissage[0].date_ref} nbSuivis={sitesSuivis.length} lotMoe={lotMoe} />
+          <Remplissage
+            syntheses={remplissagePerimetre.syntheses}
+            dateRef={remplissage.dateRef}
+            nbSuivis={remplissagePerimetre.nbSuivis}
+            lotMoe={lotMoe}
+          />
         </Bloc>
       )}
 
@@ -282,7 +294,7 @@ export function TableauDeBord({
                   <span className={`w-44 shrink-0 truncate ${enRetard ? "font-semibold text-alerte" : ""}`}>
                     <span className="inline-block w-6 text-right tabular-nums text-texte-3">{l.id}</span> {l.nom}
                   </span>
-                  <BarreCorpsEtat segments={corpsParLot.get(l.id) ?? []} repere={global} ton={enRetard ? "alerte" : "normal"} className="flex-1" />
+                  <BarreCorpsEtat segments={corpsParLot[l.id] ?? []} repere={global} ton={enRetard ? "alerte" : "normal"} className="flex-1" />
                   <span className="w-16 shrink-0 text-xs">
                     {l.arretes ? (
                       <span className="font-semibold text-danger">{l.arretes} arrêté{l.arretes > 1 ? "s" : ""}</span>

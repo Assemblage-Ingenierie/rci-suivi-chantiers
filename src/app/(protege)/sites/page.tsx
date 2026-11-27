@@ -1,6 +1,7 @@
 import { exigerRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { chargerReferentielCalcul } from "@/lib/formulaires/chargement";
+import { corpsEtatSites, type SegmentCorpsEtat } from "@/lib/formulaires/avancement";
 import { MARQUE } from "@/theme/marque";
 import { TableauSites, type LigneSite } from "./TableauSites";
 
@@ -10,6 +11,9 @@ export const metadata = { title: `Sites — ${MARQUE.titreNavigateur}` };
  * Référentiel des 387 sites (issu du DAO). Consultable par l'UG et l'admin ;
  * modifiable uniquement par l'admin (édition : étape 3 de la refonte).
  */
+/** [montant, réalisé] (FCFA, arrondis) par corps d'état, dans l'ordre des corps d'état. */
+const compacter = (segments: SegmentCorpsEtat[]) => segments.map((g) => [g.code, Math.round(g.montant), Math.round(g.realise)] as [string, number, number]);
+
 export default async function PageSites() {
   const profil = await exigerRole(["ug", "admin"]);
   const supabase = createClient();
@@ -31,7 +35,11 @@ export default async function PageSites() {
       avancement: e?.moe_avancement === null || e?.moe_avancement === undefined ? null : Number(e.moe_avancement),
       statut: e?.moe_statut ?? null,
       date_rapport: e?.moe_date ?? null,
-      postes: e?.moe_postes ?? null,
+      // Diagramme par corps d'état calculé ici ; envoyé en compact : [montant, réalisé]
+      // par corps d'état, dans l'ordre de `corps` (le navigateur ne reçoit pas les postes).
+      parts: e?.moe_postes
+        ? compacter(corpsEtatSites([{ electricite: s.electricite, type_latrines: s.type_latrines, postes: e.moe_postes }], postes, corps))
+        : [],
     };
   });
 
@@ -48,8 +56,7 @@ export default async function PageSites() {
       </p>
       <TableauSites
         sites={lignes}
-        postes={postes}
-        corps={corps}
+        corps={corps.map((c) => ({ code: c.code, libelle: c.libelle }))}
         lots={(lots ?? []).map((l) => ({ id: l.id, nom: l.nom, entreprise: l.entreprise?.nom ?? "" }))}
       />
     </div>

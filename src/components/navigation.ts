@@ -1,4 +1,4 @@
-import { CalendarCheck, FileDown, LayoutDashboard, ListChecks, MapPinned, Settings, TriangleAlert, type LucideIcon } from "lucide-react";
+import { CalendarCheck, FileDown, Images, LayoutDashboard, ListChecks, MapPinned, Settings, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { RoleUtilisateur } from "@/lib/constants";
 
 export type ItemNav = { href: string; libelle: string; icone: LucideIcon };
@@ -17,6 +17,7 @@ export function itemsParRole(role: RoleUtilisateur): ItemNav[] {
         { href: "/suivi", libelle: "Suivi", icone: CalendarCheck },
         { href: "/alertes", libelle: "Alertes", icone: TriangleAlert },
         { href: "/sites", libelle: "Sites", icone: MapPinned },
+        { href: "/photos", libelle: "Photos", icone: Images },
         { href: "/export", libelle: "Export", icone: FileDown },
       ];
     case "admin":
@@ -25,6 +26,7 @@ export function itemsParRole(role: RoleUtilisateur): ItemNav[] {
         { href: "/suivi", libelle: "Suivi", icone: CalendarCheck },
         { href: "/alertes", libelle: "Alertes", icone: TriangleAlert },
         { href: "/sites", libelle: "Sites", icone: MapPinned },
+        { href: "/photos", libelle: "Photos", icone: Images },
         { href: "/export", libelle: "Export", icone: FileDown },
         { href: "/administration", libelle: "Administration", icone: Settings },
       ];
