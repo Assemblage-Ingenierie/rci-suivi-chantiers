@@ -50,7 +50,6 @@ export function TableauSites({
   const [lot, setLot] = useState("");
   const [entreprise, setEntreprise] = useState("");
   const [lotMoe, setLotMoe] = useState("");
-  const [aVerifier, setAVerifier] = useState(false);
 
   const nomLot = useMemo(() => new Map(lots.map((l) => [l.id, l.nom])), [lots]);
   const entrepriseLot = useMemo(() => new Map(lots.map((l) => [l.id, l.entreprise])), [lots]);
@@ -66,13 +65,10 @@ export function TableauSites({
         (!lot || s.lot_id === Number(lot)) &&
         (!entreprise || entrepriseLot.get(s.lot_id) === entreprise) &&
         (!lotMoe || s.lot_moe_id === Number(lotMoe)) &&
-        (!aVerifier || s.a_verifier) &&
         (!q ||
           sansAccents(`${s.code} ${s.nom} ${s.localite} ${s.departement} ${s.region} ${entrepriseLot.get(s.lot_id) ?? ""}`).includes(q))
     );
-  }, [sites, recherche, lot, entreprise, entrepriseLot, lotMoe, aVerifier]);
-
-  const nbAVerifier = sites.filter((s) => s.a_verifier).length;
+  }, [sites, recherche, lot, entreprise, entrepriseLot, lotMoe]);
 
   return (
     <div className="space-y-4">
@@ -121,10 +117,6 @@ export function TableauSites({
               </option>
             ))}
           </select>
-        </label>
-        <label className="flex items-center gap-2 pb-2.5 text-sm">
-          <input type="checkbox" checked={aVerifier} onChange={(e) => setAVerifier(e.target.checked)} />
-          À vérifier ({nbAVerifier})
         </label>
       </div>
 
