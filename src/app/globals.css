@@ -17,6 +17,11 @@ h3 {
 h1 {
   @apply tracking-tight text-pateb-bleu;
 }
+/* Sur un bandeau coloré (en-tête de formulaire, fiche site), le titre prend la couleur du bandeau. */
+[class*="bg-accent"] h1,
+.bg-menu h1 {
+  color: inherit;
+}
 
 /* Composants de base réutilisés partout (mêmes formes pour tous les profils). */
 @layer components {

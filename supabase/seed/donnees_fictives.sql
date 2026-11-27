@@ -149,9 +149,9 @@ select
       'ouvriers_presents', case when c.statut = 'en_cours' and c.r < 0.9 then 'oui'
                                 else 'non' end,
       'securite', jsonb_build_object(
-        'separe_cour', case when c.r < 0.75 then 'oui' else 'non' end,
+        'separe_cour', case when c.r < 0.88 then 'oui' else 'non' end,
         'dangers', case when c.r > 0.97 and c.p > 0 then 'oui' else 'non' end,
-        'epi', case when c.r < 0.35 then 'oui' else 'non' end),
+        'epi', case when c.r < 0.75 then 'oui' else 'non' end),
       'problemes_batiment', case when c.p > 40 and c.r > 0.92 then '["fissure"]'::jsonb
                                  when c.p > 70 and c.r > 0.88 then '["toit"]'::jsonb
                                  else '["aucun"]'::jsonb end,
@@ -162,46 +162,46 @@ select
     when 'moe' then jsonb_build_object(
       'retard_semaines', case when c.statut = 'arrete' or (c.lent and c.statut = 'en_cours') then 2 + (c.r * 5)::int
                               when c.vitesse < 0.85 then 1 else 0 end,
-      'qualite', jsonb_build_object(
-        'implantation', case when c.p > 3 then 'conforme' else 'non_visible' end,
-        'beton_fondation', case when c.p < 15 then 'non_visible' when c.r > 0.88 then 'reserve' else 'conforme' end,
-        'ferraillage', case when c.p < 25 then 'non_visible' when c.r < 0.1 then 'reserve' else 'conforme' end,
-        'maconnerie', case when c.p < 30 then 'non_visible' when c.r > 0.93 then 'non_conforme' else 'conforme' end,
-        'charpente', case when c.p < 55 then 'non_visible' else 'conforme' end,
-        'latrines', case when c.p_lat < 10 then 'non_visible' when c.r < 0.08 then 'reserve' else 'conforme' end),
-      'qualite_observations', case when c.r > 0.88 and c.p >= 15 then 'Enrobage insuffisant des aciers sur chaînage. Reprise à faire avant coulage.' else '' end,
+      -- Qualité : conforme / non conforme au CCTP (élément pas encore réalisé : sans réponse).
+      'qualite', jsonb_strip_nulls(jsonb_build_object(
+        'implantation', case when c.p > 3 then 'conforme' end,
+        'beton_fondation', case when c.p < 15 then null when c.r > 0.95 then 'non_conforme' else 'conforme' end,
+        'ferraillage', case when c.p < 25 then null when c.r < 0.04 then 'non_conforme' else 'conforme' end,
+        'maconnerie', case when c.p < 30 then null when c.r > 0.93 then 'non_conforme' else 'conforme' end,
+        'charpente', case when c.p >= 55 then 'conforme' end,
+        'latrines', case when c.p_lat < 10 then null when c.r < 0.03 then 'non_conforme' else 'conforme' end)),
+      -- Observation obligatoire dès qu'un élément est non conforme.
+      'qualite_observations', case
+        when (c.p >= 15 and c.r > 0.93) or (c.p >= 25 and c.r < 0.04) or (c.p_lat >= 10 and c.r < 0.03)
+        then 'Non conforme au CCTP : enrobage insuffisant des aciers, aplomb des murs à reprendre. Reprise demandée avant la suite des travaux.'
+        else '' end,
       'securite', jsonb_build_object(
-        'panneau', case when c.r < 0.8 then 'oui' else 'non' end,
-        'zone_balisee', case when c.r < 0.7 then 'oui' else 'non' end,
-        'epi', case when c.r < 0.45 then 'oui' else 'non' end,
-        'trousse', case when c.r < 0.6 then 'oui' else 'non' end,
-        'stockage', case when c.r < 0.65 then 'oui' else 'non' end),
+        'panneau', case when c.r < 0.92 then 'oui' else 'non' end,
+        'zone_balisee', case when c.r < 0.9 then 'oui' else 'non' end,
+        'epi', case when c.r < 0.78 then 'oui' else 'non' end,
+        'stockage', case when c.r < 0.86 then 'oui' else 'non' end),
       'ouvriers', case when c.statut <> 'en_cours' then 0 when c.lent then 1 + (c.r * 3)::int else 4 + (c.r * 8)::int end,
       'ouvriers_qualifies', case when c.statut <> 'en_cours' then 0 when c.lent then (c.r * 2)::int else 1 + (c.r * 3)::int end,
       'chef_chantier', case when c.statut = 'en_cours' and c.r < 0.8 then 'oui' else 'non' end,
-      'materiel', case when c.statut = 'en_cours'
-                       then jsonb_build_array('betonniere', 'citerne') || case when c.p > 40 then '["echafaudage","etais"]'::jsonb else '[]'::jsonb end
-                       else '[]'::jsonb end,
       'problemes', case when c.statut = 'arrete' then case when c.r < 0.5 then '["paiement"]'::jsonb else '["approvisionnement"]'::jsonb end
                         when c.lent and c.statut = 'en_cours' then '["effectif"]'::jsonb
                         when c.statut = 'en_cours' and c.r > 0.96 then '["intemperies"]'::jsonb
-                        else '["aucun"]'::jsonb end,
-      'suite', case when c.statut = 'arrete' then 'mise_en_demeure' when c.lent and c.statut = 'en_cours' then 'ordre_service' else 'aucune' end)
+                        else '["aucun"]'::jsonb end)
     else jsonb_build_object(
-      'quantites', jsonb_strip_nulls(jsonb_build_object(
-        'dallage', round((78 * pg_temp.pct(c.pc, 'fondations'))::numeric, 1),
-        'mur_agglos', round((136 * pg_temp.pct(c.pc, 'elevation'))::numeric, 1),
-        'claustras', round((24 * pg_temp.pct(c.pc, 'elevation'))::numeric, 1),
-        'enduits', round((285 * pg_temp.pct(c.pc, 'elevation'))::numeric),
-        'couverture', round((134 * pg_temp.pct(c.pc, 'couverture'))::numeric),
-        'faux_plafond', round((116 * pg_temp.pct(c.pc, 'faux_plafond'))::numeric),
-        'portes_2v', round((1 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'portes_1v', round((1 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'persiennes', round((2 * pg_temp.pct(c.pc, 'serrurerie'))::numeric),
-        'tableau', round((5.95 * pg_temp.pct(c.pc, 'menuiserie'))::numeric, 2),
-        'placards', round((2 * pg_temp.pct(c.pc, 'menuiserie'))::numeric),
-        'reglettes', case when c.electricite then round((7 * pg_temp.pct(c.pc, 'electricite'))::numeric) end,
-        'cabines', round((3 * c.p_lat / 100)::numeric))),
+      -- Suivi environnemental et social (« oui » = mesure respectée).
+      'es', jsonb_build_object(
+        'dechets', case when c.r < 0.85 then 'oui' else 'non' end,
+        'drainage', case when c.r < 0.92 then 'oui' else 'non' end,
+        'nuisances', case when c.r < 0.9 then 'oui' else 'non' end,
+        'hygiene', case when c.r < 0.8 then 'oui' else 'non' end,
+        'emploi_local', case when c.r < 0.95 then 'oui' else 'non' end,
+        'pas_enfants', case when c.r < 0.995 then 'oui' else 'non' end,
+        'code_conduite', case when c.r < 0.75 then 'oui' else 'non' end,
+        'mecanisme_plaintes', case when c.r < 0.7 then 'oui' else 'non' end),
+      'plaintes', case when c.r > 0.97 then 'oui' else 'non' end,
+      'es_observations', case when c.r >= 0.7
+        then 'Code de conduite non affiché et mécanisme de plaintes à présenter au COGES. Rappel fait à l''entreprise.'
+        else '' end,
       'difficultes', case when c.statut = 'arrete' then '["entreprise_absente"]'::jsonb
                           when c.lent and c.statut = 'en_cours' then '["materiaux_manquants"]'::jsonb
                           when c.r > 0.96 and c.p > 0 then '["stockage_non_protege"]'::jsonb

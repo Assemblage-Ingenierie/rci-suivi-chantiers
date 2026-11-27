@@ -2,7 +2,6 @@ import { DEFINITIONS } from "@/lib/formulaires/definitions";
 import type { CorpsEtat, PosteDef, Question, SourceFormulaire } from "@/lib/formulaires/types";
 import { LIBELLES_STATUTS, STATUTS } from "@/lib/formulaires/statuts";
 import { corpsEtatSites } from "@/lib/formulaires/avancement";
-import { QUANTITES_DQE } from "@/lib/formulaires/quantites";
 import { dateLongue, pct } from "@/lib/tableau-de-bord/calculs";
 import {
   avancementA,
@@ -205,9 +204,8 @@ export function RapportExport({
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-2 print:grid-cols-2">
             <Comptage titre="Problèmes signalés" source="moe" question="problemes" formulaires={moe} exclure={["aucun"]} valeurs={(f) => liste(rep(f.reponses).problemes)} />
-            <Comptage titre="Suite à donner proposée" source="moe" question="suite" formulaires={moe} exclure={["aucune"]} valeurs={(f) => liste([rep(f.reponses).suite])} />
             <Comptage
-              titre="Qualité : éléments non conformes"
+              titre="Qualité : éléments non conformes au CCTP"
               source="moe"
               question="qualite"
               formulaires={moe}
@@ -285,14 +283,22 @@ export function RapportExport({
             </div>
             <Comptage titre="Difficultés relevées" source="ug" question="difficultes" formulaires={ug} exclure={["aucune"]} valeurs={(f) => liste(rep(f.reponses).difficultes)} />
             <div className="md:col-span-2 print:col-span-2">
-              <SousTitre>Contrôle des quantités</SousTitre>
+              <SousTitre>Environnement et social</SousTitre>
               <Tableau
-                entetes={["Élément (prévu au DQE)", "Fiches contrôlées", "Écarts constatés"]}
-                lignes={QUANTITES_DQE.map((q) => {
-                  const valeurs = ug.map((f) => rep(rep(f.reponses).quantites)[q.id]).filter((v): v is number => typeof v === "number");
-                  return [`${q.libelle} (${nombre(q.prevu, 2)} ${q.unite})`, valeurs.length, valeurs.filter((v) => v !== q.prevu).length];
-                }).filter(([, n]) => Number(n) > 0)}
-                vide="Aucune quantité contrôlée sur la période."
+                entetes={["Mesure attendue", "Fiches renseignées", "Écarts (« non »)", "Sites concernés"]}
+                lignes={[
+                  ...options("ug", "es").map((o) => {
+                    const renseignees = ug.filter((f) => rep(rep(f.reponses).es)[o.valeur]);
+                    const ecarts = renseignees.filter((f) => rep(rep(f.reponses).es)[o.valeur] === "non");
+                    return [o.libelle, renseignees.length, ecarts.length, new Set(ecarts.map((f) => f.site_id)).size] as [string, number, number, number];
+                  }),
+                  (() => {
+                    const r = ug.filter((f) => rep(f.reponses).plaintes);
+                    const oui = r.filter((f) => rep(f.reponses).plaintes === "oui");
+                    return ["Plaintes de la communauté reçues", r.length, oui.length, new Set(oui.map((f) => f.site_id)).size] as [string, number, number, number];
+                  })(),
+                ].filter(([, n]) => Number(n) > 0)}
+                vide="Aucune fiche E&S sur la période."
               />
             </div>
           </div>

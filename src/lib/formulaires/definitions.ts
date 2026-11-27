@@ -58,7 +58,7 @@ const CSTC: DefinitionFormulaire = {
     {
       id: "batiment",
       numero: 3,
-      titre: "Voyez-vous un problème sur le bâtiment ?",
+      titre: "Voyez-vous un problème grave sur le bâtiment ?",
       questions: [
         {
           type: "choix",
@@ -176,7 +176,13 @@ const MOE: DefinitionFormulaire = {
       titre: "Qualité",
       questions: [
         { type: "qualite", id: "qualite", libelle: "Qualité d'exécution", elements: QUALITE_ELEMENTS },
-        { type: "texte", id: "qualite_observations", libelle: "Réserves et non-conformités", indication: "Décrire chaque réserve et la reprise attendue" },
+        {
+          type: "texte",
+          id: "qualite_observations",
+          libelle: "Non-conformités au CCTP",
+          indication: "Décrire chaque non-conformité et la reprise attendue",
+          obligatoireSi: { question: "qualite", valeur: "non_conforme" },
+        },
       ],
     },
     {
@@ -191,7 +197,6 @@ const MOE: DefinitionFormulaire = {
             { valeur: "panneau", libelle: "Panneau de chantier en place" },
             { valeur: "zone_balisee", libelle: "Zone de chantier balisée, séparée des élèves" },
             { valeur: "epi", libelle: "Port des EPI (casque, chaussures)" },
-            { valeur: "trousse", libelle: "Trousse de premiers secours sur site" },
             { valeur: "stockage", libelle: "Stockage des matériaux sécurisé" },
           ],
         },
@@ -204,20 +209,6 @@ const MOE: DefinitionFormulaire = {
         { type: "nombre", id: "ouvriers", libelle: "Ouvriers présents", min: 0, max: 200, pas: 1 },
         { type: "nombre", id: "ouvriers_qualifies", libelle: "dont qualifiés (maçons, ferrailleurs)", min: 0, max: 200, pas: 1 },
         { type: "choix", id: "chef_chantier", libelle: "Chef de chantier présent", options: OUI_NON, colonnes: 2 },
-        {
-          type: "choix",
-          id: "materiel",
-          libelle: "Matériel présent sur site",
-          multiple: true,
-          options: [
-            { valeur: "betonniere", libelle: "Bétonnière" },
-            { valeur: "vibreur", libelle: "Vibreur" },
-            { valeur: "echafaudage", libelle: "Échafaudage" },
-            { valeur: "etais", libelle: "Étais" },
-            { valeur: "groupe", libelle: "Groupe électrogène" },
-            { valeur: "citerne", libelle: "Citerne d'eau" },
-          ],
-        },
       ],
     },
     {
@@ -241,18 +232,6 @@ const MOE: DefinitionFormulaire = {
           ],
         },
         { type: "commentaire", id: "commentaire", libelle: "Commentaire" },
-        {
-          type: "choix",
-          id: "suite",
-          libelle: "Suite à donner",
-          colonnes: 2,
-          options: [
-            { valeur: "aucune", libelle: "Aucune" },
-            { valeur: "journal", libelle: "Observation au journal" },
-            { valeur: "ordre_service", libelle: "Ordre de service" },
-            { valeur: "mise_en_demeure", libelle: "Proposer mise en demeure" },
-          ],
-        },
       ],
     },
     {
@@ -266,6 +245,22 @@ const MOE: DefinitionFormulaire = {
 // ---------------------------------------------------------------------------
 // UG — fiche de visite technique de l'unité de gestion
 // ---------------------------------------------------------------------------
+/**
+ * Suivi environnemental et social (E&S) de l'UG : chaque élément est formulé
+ * pour que « Oui » soit la situation attendue ; un « Non » rend obligatoire la
+ * description de l'écart.
+ */
+const ES_ELEMENTS: Option[] = [
+  { valeur: "dechets", libelle: "Déchets de chantier collectés et évacués" },
+  { valeur: "drainage", libelle: "Pas d'eau stagnante ni d'érosion autour du chantier" },
+  { valeur: "nuisances", libelle: "Bruit et poussière limités pendant les heures de classe" },
+  { valeur: "hygiene", libelle: "Eau potable et toilettes disponibles pour les ouvriers" },
+  { valeur: "emploi_local", libelle: "Main-d'œuvre locale employée" },
+  { valeur: "pas_enfants", libelle: "Aucun enfant au travail sur le chantier" },
+  { valeur: "code_conduite", libelle: "Code de conduite des ouvriers (VBG, EAS/HS) signé et affiché" },
+  { valeur: "mecanisme_plaintes", libelle: "Mécanisme de gestion des plaintes connu de la communauté" },
+];
+
 const UG: DefinitionFormulaire = {
   source: "ug",
   titre: "Fiche de visite UG",
@@ -280,16 +275,6 @@ const UG: DefinitionFormulaire = {
         { type: "statut", id: "statut", libelle: "Statut du chantier", requis: true },
         { type: "postes", id: "postes", libelle: "Avancement par poste" },
       ],
-    },
-    {
-      id: "quantites",
-      titre: "Quantités",
-      questions: [{ type: "quantites", id: "quantites", libelle: "Contrôle des quantités" }],
-    },
-    {
-      id: "photos",
-      titre: "Photos",
-      questions: [{ type: "photos", id: "photos", libelle: "Photos géolocalisées", minimum: 4 }],
     },
     {
       id: "difficultes",
@@ -314,14 +299,45 @@ const UG: DefinitionFormulaire = {
         { type: "commentaire", id: "commentaire", libelle: "Précisions" },
       ],
     },
+    {
+      id: "es",
+      titre: "Environnement et social",
+      questions: [
+        { type: "oui_non", id: "es", libelle: "Mesures environnementales et sociales", elements: ES_ELEMENTS },
+        {
+          type: "choix",
+          id: "plaintes",
+          libelle: "Plaintes de la communauté reçues depuis la dernière visite",
+          options: OUI_NON,
+          colonnes: 2,
+        },
+        {
+          type: "texte",
+          id: "es_observations",
+          libelle: "Écarts environnementaux et sociaux",
+          indication: "Décrire chaque écart constaté et la mesure demandée à l'entreprise",
+          obligatoireSi: { question: "es", valeur: "non" },
+        },
+      ],
+    },
+    {
+      id: "photos",
+      titre: "Photos",
+      questions: [{ type: "photos", id: "photos", libelle: "Photos géolocalisées", minimum: 4 }],
+    },
   ],
 };
 
 export const DEFINITIONS: Record<SourceFormulaire, DefinitionFormulaire> = { cstc: CSTC, moe: MOE, ug: UG };
 
+/** Appréciation de la qualité d'un élément : conforme ou non au CCTP. */
 export const QUALITE_OPTIONS: Option[] = [
-  { valeur: "conforme", libelle: "Conforme" },
+  { valeur: "conforme", libelle: "Conforme au CCTP" },
+  { valeur: "non_conforme", libelle: "Non conforme au CCTP" },
+];
+/** Libellés pour l'affichage, y compris les appréciations des anciens rapports. */
+export const QUALITE_LIBELLES: Option[] = [
+  ...QUALITE_OPTIONS,
   { valeur: "reserve", libelle: "Réserve" },
-  { valeur: "non_conforme", libelle: "Non conf." },
   { valeur: "non_visible", libelle: "Non visible" },
 ];

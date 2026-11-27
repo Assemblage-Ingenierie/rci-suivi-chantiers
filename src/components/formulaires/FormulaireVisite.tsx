@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, ImageIcon, Loader2, MapPin, Send, X } from "lucide-react";
+import { Bath, Camera, ImageIcon, ImagePlus, Loader2, MapPin, School, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Json } from "@/lib/database.types";
 import { familleProfil, LIBELLES_LATRINES, type TypeLatrines } from "@/lib/constants";
@@ -13,6 +13,7 @@ import { formatNombre, quantitesDuSite } from "@/lib/formulaires/quantites";
 import {
   envoyerPhotos,
   preparerPhoto,
+  type OriginePhoto,
   supprimerPhoto,
   type PhotoExistante,
   type PhotoLocale,
@@ -93,8 +94,16 @@ export function FormulaireVisite({
   const [erreurs, setErreurs] = useState<string[]>([]);
   const [envoi, setEnvoi] = useState(false);
   const entreePhotos = useRef<HTMLInputElement>(null);
+  const entreeGalerie = useRef<HTMLInputElement>(null);
 
   const reponse = (id: string) => reponses[id];
+  /** La réponse indiquée contient-elle la valeur (réponse simple, liste ou grille d'éléments) ? */
+  const texteAttendu = ({ question, valeur }: { question: string; valeur: string }) => {
+    const r = reponses[question];
+    if (Array.isArray(r)) return r.includes(valeur);
+    if (r && typeof r === "object") return Object.values(r).includes(valeur);
+    return r === valeur;
+  };
   const repondre = (id: string, v: Json) => setReponses((r) => ({ ...r, [id]: v }));
 
   // ---------------------------------------------------------------- envoi
@@ -108,6 +117,8 @@ export function FormulaireVisite({
           if (v === undefined || v === null || (Array.isArray(v) && v.length === 0))
             manquants.push(`« ${q.libelle} » : réponse attendue`);
         }
+        if (q.type === "texte" && q.obligatoireSi && texteAttendu(q.obligatoireSi) && !String(reponse(q.id) ?? "").trim())
+          manquants.push(`« ${q.libelle} » : à remplir (${section.titre.toLowerCase()} non conforme)`);
       }
     }
     if (dateVisite > aujourdhui()) manquants.push("La date de visite ne peut pas être dans le futur");
@@ -303,9 +314,13 @@ export function FormulaireVisite({
           </div>
         );
       case "texte":
+        if (q.obligatoireSi && !texteAttendu(q.obligatoireSi)) return null;
         return (
           <label className="block">
-            <span className="etiquette">{q.libelle}</span>
+            <span className="etiquette">
+              {q.libelle}
+              {q.obligatoireSi && <span className="ml-1 font-normal text-danger">(obligatoire)</span>}
+            </span>
             <textarea
               rows={3}
               placeholder={q.indication}
@@ -352,15 +367,19 @@ export function FormulaireVisite({
         <p className="etiquette mb-0">Avancement par poste</p>
         {groupes.map((g) => {
           const valeurs = valeursPostes[g.cle] ?? {};
+          const Icone = g.cle === "classe" ? School : Bath;
           return (
-            <div key={g.cle}>
-              <p className="mb-1 text-sm font-semibold text-texte-2">{g.titre}</p>
-              <div className="divide-y divide-bordure">
+            <section key={g.cle} className="overflow-hidden rounded-carte border-2 border-accent/40">
+              <h3 className="flex items-center gap-2 bg-accent-clair px-3 py-2 text-base font-bold text-accent-fonce">
+                <Icone className="h-5 w-5" aria-hidden />
+                {g.titre}
+              </h3>
+              <div className="divide-y divide-bordure px-3">
                 {g.defs.map((p) => (
                   <div key={p.code} className="flex items-center justify-between gap-2 py-1.5">
                     <span className="text-[0.95rem]">{p.libelle}</span>
                     <Compteur
-                      libelle={p.libelle}
+                      libelle={`${g.titre} — ${p.libelle}`}
                       valeur={valeurs[p.code] ?? 0}
                       pas={10}
                       suffixe=" %"
@@ -371,7 +390,7 @@ export function FormulaireVisite({
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
@@ -442,15 +461,16 @@ export function FormulaireVisite({
   function saisiePhotos(minimum?: number) {
     const entree = entreePhotos;
     const total = photosGardees.length + photos.length;
-    async function ajouter(fichiers: FileList | null) {
+    async function ajouter(fichiers: FileList | null, origine: OriginePhoto) {
       if (!fichiers?.length) return;
       setPreparation(true);
       try {
-        const prepares = await Promise.all([...fichiers].map(preparerPhoto));
+        const prepares = await Promise.all([...fichiers].map((f) => preparerPhoto(f, origine)));
         setPhotos((p) => [...p, ...prepares]);
       } finally {
         setPreparation(false);
         if (entree.current) entree.current.value = "";
+        if (entreeGalerie.current) entreeGalerie.current.value = "";
       }
     }
     const heure = (d: string | null) =>
@@ -492,12 +512,26 @@ export function FormulaireVisite({
           <button
             type="button"
             onClick={() => entree.current?.click()}
+            disabled={preparation}
             className="flex aspect-square flex-col items-center justify-center gap-1 rounded-carte border-2 border-dashed border-accent text-accent-fonce"
           >
             {preparation ? <Loader2 className="h-6 w-6 animate-spin" /> : <Camera className="h-6 w-6" />}
             <span className="text-sm font-semibold">{preparation ? "Préparation…" : "Prendre une photo"}</span>
           </button>
+          <button
+            type="button"
+            onClick={() => entreeGalerie.current?.click()}
+            disabled={preparation}
+            className="flex aspect-square flex-col items-center justify-center gap-1 rounded-carte border-2 border-dashed border-bordure-forte text-texte-2"
+          >
+            <ImagePlus className="h-6 w-6" />
+            <span className="px-1 text-center text-sm font-semibold">Choisir sur le téléphone</span>
+          </button>
         </div>
+        <p className="mt-1.5 text-xs text-texte-3">
+          Photo prise sur place : position GPS du téléphone. Photo choisie sur le téléphone : position et date enregistrées
+          dans la photo, si elle en contient.
+        </p>
         <input
           ref={entree}
           type="file"
@@ -505,8 +539,9 @@ export function FormulaireVisite({
           capture="environment"
           multiple
           hidden
-          onChange={(e) => ajouter(e.target.files)}
+          onChange={(e) => ajouter(e.target.files, "camera")}
         />
+        <input ref={entreeGalerie} type="file" accept="image/*" multiple hidden onChange={(e) => ajouter(e.target.files, "galerie")} />
       </div>
     );
   }

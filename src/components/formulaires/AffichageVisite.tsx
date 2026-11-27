@@ -1,7 +1,7 @@
 import { ImageIcon, MapPin } from "lucide-react";
 import type { Json } from "@/lib/database.types";
 import { LIBELLES_LATRINES, type TypeLatrines } from "@/lib/constants";
-import { DEFINITIONS, QUALITE_OPTIONS } from "@/lib/formulaires/definitions";
+import { DEFINITIONS, QUALITE_LIBELLES } from "@/lib/formulaires/definitions";
 import { LIBELLES_STATUTS, LIBELLES_STATUTS_CSTC } from "@/lib/formulaires/statuts";
 import { ouvrageLatrines, postesApplicables } from "@/lib/formulaires/avancement";
 import { formatNombre, quantitesDuSite } from "@/lib/formulaires/quantites";
@@ -77,7 +77,7 @@ export function AffichageVisite({
       case "oui_non":
       case "qualite": {
         const valeurs = (r ?? {}) as Record<string, string>;
-        const options = q.type === "qualite" ? QUALITE_OPTIONS : [
+        const options = q.type === "qualite" ? QUALITE_LIBELLES : [
           { valeur: "oui", libelle: "Oui" },
           { valeur: "non", libelle: "Non" },
         ];
@@ -123,9 +123,9 @@ export function AffichageVisite({
         {groupes.map((g) => {
           const v = valeursPostes[g.cle] ?? {};
           return (
-            <div key={g.cle}>
-              <p className="text-sm font-semibold text-texte-2">{g.titre}</p>
-              <dl className="divide-y divide-bordure">
+            <div key={g.cle} className="overflow-hidden rounded-carte border border-accent/30">
+              <p className="bg-accent-clair px-3 py-1.5 text-sm font-bold text-accent-fonce">{g.titre}</p>
+              <dl className="divide-y divide-bordure px-3">
                 {g.defs.map((p) => (
                   <div key={p.code} className="flex items-center gap-3 py-1.5 text-[0.95rem]">
                     <dt className="flex-1">{p.libelle}</dt>

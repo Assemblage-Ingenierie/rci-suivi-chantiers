@@ -127,7 +127,7 @@ const critique = (texte: string): Detection => ({ niveau: "critique", texte });
 
 const PROBLEMES_MOYENS = ["effectif", "approvisionnement", "paiement", "acces", "intemperies"];
 const DIFFICULTES_UG_MOYENS = ["materiaux_manquants", "acces"];
-const AUTRES_SECURITE_MOE = ["panneau", "epi", "trousse", "stockage"];
+const AUTRES_SECURITE_MOE = ["panneau", "epi", "stockage"];
 
 type Groupe = "actif" | "arret" | "fini" | "pas";
 const groupe = (st: StatutChantier | null): Groupe | null =>
@@ -161,14 +161,6 @@ export const REGLES: Regle[] = [
     niveaux: "Critique",
     description: () => "Chantier « en cours » selon la MOE, mais 0 ouvrier présent lors de sa visite.",
     detecter: ({ s, moe }) => (moe && s.moe_statut === "en_cours" && moe.ouvriers === 0 ? critique("Aucun ouvrier (MOE)") : null),
-  },
-  {
-    id: "mise_en_demeure",
-    famille: "presence",
-    source: "moe",
-    niveaux: "Critique",
-    description: () => "La MOE propose une mise en demeure de l'entreprise.",
-    detecter: ({ moe }) => (moe?.suite === "mise_en_demeure" ? critique("Mise en demeure proposée") : null),
   },
   {
     id: "ouvriers_absents_cstc",
@@ -255,7 +247,7 @@ export const REGLES: Regle[] = [
     source: "moe",
     niveaux: "À surveiller",
     description: () =>
-      "La MOE relève une règle non respectée : panneau de chantier, port des protections, trousse de secours ou stockage sécurisé.",
+      "La MOE relève une règle non respectée : panneau de chantier, port des protections ou stockage sécurisé.",
     detecter: ({ moe }) => {
       const sec = rep(moe?.securite);
       const manques = AUTRES_SECURITE_MOE.filter((k) => sec[k] === "non");
@@ -276,7 +268,8 @@ export const REGLES: Regle[] = [
     famille: "qualite",
     source: "moe",
     niveaux: "Critique dès 2 éléments, sinon à surveiller",
-    description: () => "La MOE juge un ou plusieurs éléments non conformes (implantation, béton, ferraillage, maçonnerie, charpente, latrines).",
+    description: () =>
+      "La MOE juge un ou plusieurs éléments non conformes au CCTP (implantation, béton, ferraillage, maçonnerie, charpente, latrines).",
     detecter: ({ moe }) => {
       const q = rep(moe?.qualite);
       const nc = Object.keys(q).filter((k) => q[k] === "non_conforme");
